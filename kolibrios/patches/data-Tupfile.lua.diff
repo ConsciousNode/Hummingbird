@@ -1,0 +1,140 @@
+diff --git a/data/Tupfile.lua b/data/Tupfile.lua
+index f2cb6787..f3600a9a 100644
+--- a/data/Tupfile.lua
++++ b/data/Tupfile.lua
+@@ -25,25 +25,25 @@ img_files = {
+  {"MACROS.INC", SRC_PROGS .. "/macros.inc"},
+ -- {"CONFIG.INC", SRC_PROGS .. "/config.inc"},
+  {"STRUCT.INC", SRC_PROGS .. "/struct.inc"},
+- {"ALLGAMES", "common/allgames"},
++--[hummingbird: prebuilt binary, no buildable source here]  {"ALLGAMES", "common/allgames"},
+  {"HOME.PNG", "common/wallpapers/T_Home.png"},
+  {"ICONS32.PNG", "common/icons32.png"},
+  {"ICONS18.PNG", "common/icons18.png"},
+  {"INDEX.HTM", "common/index_htm"},
+- {"KUZKINA.MID", "common/kuzkina.mid"},
++--[hummingbird: unused by any program, no licence or provenance in the tree]  {"KUZKINA.MID", "common/kuzkina.mid"},
+  {"SINE.MP3", "common/sine.mp3"},
+  {"LANG.INC", build_type .. "/lang.inc"},
+  {"NOTIFY3.PNG", "common/notify3.png"},
+  {"3D/HOUSE.3DS", "common/3d/house.3ds"},
+  {"File Managers/ICON2EXT.INI", "common/File Managers/icon2ext.ini"},
+- {"FONTS/TAHOMA.KF", "common/fonts/tahoma.kf"},
++--[hummingbird: unused by any program, no licence or provenance in the tree]  {"FONTS/TAHOMA.KF", "common/fonts/tahoma.kf"},
+  -- {"LIB/ICONV.OBJ", "common/lib/iconv.obj"},
+- {"LIB/KMENU.OBJ", "common/lib/kmenu.obj"},
+- {"LIB/PIXLIB.OBJ", "common/lib/pixlib.obj"},
+- {"MEDIA/AC97SND", "common/media/ac97snd"},
++--[hummingbird: prebuilt binary, no buildable source here]  {"LIB/KMENU.OBJ", "common/lib/kmenu.obj"},
++--[hummingbird: prebuilt binary, no buildable source here]  {"LIB/PIXLIB.OBJ", "common/lib/pixlib.obj"},
++--[hummingbird: prebuilt binary, no buildable source here]  {"MEDIA/AC97SND", "common/media/ac97snd"},
+  {"NETWORK/FTPC.INI", SRC_PROGS .. "/network/ftpc/ftpc.ini"},
+  {"NETWORK/FTPD.INI", "common/network/ftpd.ini"},
+- {"NETWORK/KNMAP", "common/network/knmap"},
++--[hummingbird: prebuilt binary, no buildable source here]  {"NETWORK/KNMAP", "common/network/knmap"},
+  {"NETWORK/USERS.INI", "common/network/users.ini"},
+  {"SETTINGS/APP.INI", "common/settings/app.ini"},
+  {"SETTINGS/APP_PLUS.INI", "common/settings/app_plus.ini"},
+@@ -80,7 +80,7 @@ if build_type == "ru_RU" then tup.append_table(img_files, {
+  {"EXAMPLE.ASM", SRC_PROGS .. "/develop/examples/example/example.asm"},
+  {"DEVELOP/BACKY", SRC_PROGS .. "/develop/backy/Backy"},
+  {"File Managers/KFAR.INI", "common/File Managers/kfar.ini"},
+- {"GAMES/DESCENT", "common/games/descent"},
++--[hummingbird: prebuilt binary, no buildable source here]  {"GAMES/DESCENT", "common/games/descent"},
+  {"SETTINGS/.shell", SRC_PROGS .. "/system/shell/bin/eng/.shell"},
+  {"SETTINGS/GAMES.INI", "common/settings/games.ini"},
+  {"SETTINGS/MYKEY.INI", SRC_PROGS .. "/system/MyKey/mykey.ini"},
+@@ -90,7 +90,7 @@ if build_type == "ru_RU" then tup.append_table(img_files, {
+  {"EXAMPLE.ASM", SRC_PROGS .. "/develop/examples/example/example.asm"},
+  {"DEVELOP/BACKY", SRC_PROGS .. "/develop/backy/Backy"},
+  {"File Managers/KFAR.INI", "common/File Managers/kfar.ini"},
+- {"GAMES/DESCENT", "common/games/descent"},
++--[hummingbird: prebuilt binary, no buildable source here]  {"GAMES/DESCENT", "common/games/descent"},
+  {"SETTINGS/.shell", SRC_PROGS .. "/system/shell/bin/eng/.shell"},
+  {"SETTINGS/GAMES.INI", "common/settings/games.ini"},
+  {"SETTINGS/MYKEY.INI", SRC_PROGS .. "/system/MyKey/mykey.ini"},
+@@ -99,7 +99,7 @@ if build_type == "ru_RU" then tup.append_table(img_files, {
+  {"EXAMPLE.ASM", SRC_PROGS .. "/develop/examples/example/example.asm"},
+  {"DEVELOP/BACKY", SRC_PROGS .. "/develop/backy/Backy"},
+  {"File Managers/KFAR.INI", "common/File Managers/kfar.ini"},
+- {"GAMES/DESCENT", "common/games/descent"},
++--[hummingbird: prebuilt binary, no buildable source here]  {"GAMES/DESCENT", "common/games/descent"},
+  {"SETTINGS/.shell", SRC_PROGS .. "/system/shell/bin/eng/.shell"},
+  {"SETTINGS/MYKEY.INI", SRC_PROGS .. "/system/MyKey/mykey_it.ini"},
+  {"SETTINGS/GAMES.INI", "common/settings/games.ini"},
+@@ -108,7 +108,7 @@ if build_type == "ru_RU" then tup.append_table(img_files, {
+  {"EXAMPLE.ASM", SRC_PROGS .. "/develop/examples/example/example.asm"},
+  {"DEVELOP/BACKY", SRC_PROGS .. "/develop/backy/Backy"},
+  {"File Managers/KFAR.INI", "common/File Managers/kfar.ini"},
+- {"GAMES/DESCENT", "common/games/descent"},
++--[hummingbird: prebuilt binary, no buildable source here]  {"GAMES/DESCENT", "common/games/descent"},
+  {"SETTINGS/.shell", SRC_PROGS .. "/system/shell/bin/eng/.shell"},
+  {"SETTINGS/GAMES.INI", "common/settings/games.ini"},
+  {"SETTINGS/MYKEY.INI", SRC_PROGS .. "/system/MyKey/mykey.ini"},
+@@ -167,15 +167,15 @@ extra_files = {
+  {"kolibrios/develop/fpc/", "common/develop/fpc/*"},
+  {"kolibrios/develop/fpc/examples/", "../programs/develop/fp/examples/src/*"},
+  {"kolibrios/develop/fasm/fasm.txt", SRC_PROGS .. "/develop/fasm/1.73/fasm.txt"},
+- {"kolibrios/develop/oberon07/compiler.kex", SRC_PROGS .. "/develop/oberon07/Compiler.kex"},
+- {"kolibrios/develop/oberon07/LICENSE", SRC_PROGS .. "/develop/oberon07/LICENSE"},
+- {"kolibrios/develop/oberon07/doc/CC.txt", SRC_PROGS .. "/develop/oberon07/doc/CC.txt"},
+- {"kolibrios/develop/oberon07/doc/KOSLib.txt", SRC_PROGS .. "/develop/oberon07/doc/KOSLib.txt"},
+- {"kolibrios/develop/oberon07/doc/x86.txt", SRC_PROGS .. "/develop/oberon07/doc/x86.txt"},
+- {"kolibrios/develop/oberon07/doc/Oberon07.Report_2016_05_03.pdf", SRC_PROGS .. "/develop/oberon07/doc/Oberon07.Report_2016_05_03.pdf"},
+- {"kolibrios/develop/oberon07/lib/KolibriOS/", SRC_PROGS .. "/develop/oberon07/lib/KolibriOS/*"},
+- {"kolibrios/develop/oberon07/lib/Math/", SRC_PROGS .. "/develop/oberon07/lib/Math/*"},
+- {"kolibrios/develop/oberon07/samples/", SRC_PROGS .. "/develop/oberon07/samples/KolibriOS/*"},
++--[hummingbird: missing in tree]  {"kolibrios/develop/oberon07/compiler.kex", SRC_PROGS .. "/develop/oberon07/Compiler.kex"},
++--[hummingbird: missing in tree]  {"kolibrios/develop/oberon07/LICENSE", SRC_PROGS .. "/develop/oberon07/LICENSE"},
++--[hummingbird: dir missing in tree]  {"kolibrios/develop/oberon07/doc/CC.txt", SRC_PROGS .. "/develop/oberon07/doc/CC.txt"},
++--[hummingbird: dir missing in tree]  {"kolibrios/develop/oberon07/doc/KOSLib.txt", SRC_PROGS .. "/develop/oberon07/doc/KOSLib.txt"},
++--[hummingbird: dir missing in tree]  {"kolibrios/develop/oberon07/doc/x86.txt", SRC_PROGS .. "/develop/oberon07/doc/x86.txt"},
++--[hummingbird: dir missing in tree]  {"kolibrios/develop/oberon07/doc/Oberon07.Report_2016_05_03.pdf", SRC_PROGS .. "/develop/oberon07/doc/Oberon07.Report_2016_05_03.pdf"},
++--[hummingbird: dir missing in tree]  {"kolibrios/develop/oberon07/lib/KolibriOS/", SRC_PROGS .. "/develop/oberon07/lib/KolibriOS/*"},
++--[hummingbird: dir missing in tree]  {"kolibrios/develop/oberon07/lib/Math/", SRC_PROGS .. "/develop/oberon07/lib/Math/*"},
++--[hummingbird: dir missing in tree]  {"kolibrios/develop/oberon07/samples/", SRC_PROGS .. "/develop/oberon07/samples/KolibriOS/*"},
+  {"kolibrios/develop/tcc/lib/", SRC_PROGS ..  "/develop/ktcc/bin/lib/*.def"},
+  {"kolibrios/develop/tcc/lib/libSDL.a", SRC_PROGS .. "/develop/ktcc/bin/lib/libSDL.a"},
+  {"kolibrios/develop/tcc/include/", SRC_PROGS ..  "/develop/ktcc/libc.obj/include/*"},
+@@ -225,9 +225,9 @@ extra_files = {
+  {"kolibrios/games/pig/", "common/games/pig/*"},
+  {"kolibrios/games/soko/", "common/games/soko/*"},
+  {"kolibrios/games/fridge/", "common/games/fridge/*"},
+- {"kolibrios/games/the_bus/menu.png", SRC_PROGS .. "/cmm/the_bus/menu.png"},
+- {"kolibrios/games/the_bus/objects.png", SRC_PROGS .. "/cmm/the_bus/objects.png"},
+- {"kolibrios/games/the_bus/road.png", SRC_PROGS .. "/cmm/the_bus/road.png"},
++--[hummingbird: dir missing in tree]  {"kolibrios/games/the_bus/menu.png", SRC_PROGS .. "/cmm/the_bus/menu.png"},
++--[hummingbird: dir missing in tree]  {"kolibrios/games/the_bus/objects.png", SRC_PROGS .. "/cmm/the_bus/objects.png"},
++--[hummingbird: dir missing in tree]  {"kolibrios/games/the_bus/road.png", SRC_PROGS .. "/cmm/the_bus/road.png"},
+  {"kolibrios/grafx2/fonts/", "common/media/grafx2/fonts/*"},
+  {"kolibrios/grafx2/scripts/", "common/media/grafx2/scripts/libs/*"},
+  {"kolibrios/grafx2/scripts/libs/", "common/media/grafx2/scripts/*"},
+@@ -295,7 +295,7 @@ extra_files = {
+  {"kolibrios/res/system/", "common/signs.png"},
+  {"kolibrios/utils/vmode", "common/vmode"},
+  {"kolibrios/utils/texture", "common/utils/texture"},
+- {"kolibrios/utils/kterm/kterm", VAR_PROGS .. "/other/kterm/kterm"},
++--[hummingbird: missing in tree]  {"kolibrios/utils/kterm/kterm", VAR_PROGS .. "/other/kterm/kterm"},
+  {"kolibrios/utils/cnc_editor/cnc_editor", VAR_PROGS .. "/other/cnc_editor/cnc_editor"},
+  {"kolibrios/utils/cnc_editor/kolibri.NC", SRC_PROGS .. "/other/cnc_editor/kolibri.NC"},
+  {"kolibrios/utils/kfm/kfm.ini", "common/File Managers/kfm.ini"},
+@@ -892,6 +892,11 @@ function expand_extra_files(files)
+   return result
+ end
+ 
++-- [hummingbird] CONFIG_HUMMINGBIRD_IMG_ONLY: build only kolibri.img, skipping the
++-- CD/ISO, distribution kit and raw-disk extras (their sources aren't in the floppy subset)
++IMG_ONLY = tup.getconfig("HUMMINGBIRD_IMG_ONLY") ~= ""
++if IMG_ONLY then extra_files = {}; distr_extra_files = {}; iso_extra_files = {}; skinlist = {} end
++
+ -- append skins to extra_files
+ for i,v in ipairs(skinlist) do
+   table.insert(extra_files, {"kolibrios/res/skins/", VAR_SKINS .. "/" .. v})
+@@ -950,6 +955,7 @@ end
+ 
+ -- generate tup rule for kolibri.img
+ tup.definerule{inputs = input_deps, command = make_img_command1, outputs = {"kolibri.img"}}
++if IMG_ONLY then return end -- [hummingbird]
+ 
+ -- generate command and dependencies for mkisofs
+ iso_files_list = ""

@@ -1,0 +1,1617 @@
+{
+ "image": "kolibri-hummingbird.img",
+ "image_sha256": "0df1a2e9a6791fab16063ff5845edb0e4407fd2b92bc0408a25b2d9cd5e7ef5f",
+ "kolibrios_commit": "62b2b72cb39e509a2e5e2a72d7a40af98d43db74",
+ "files": [
+  {
+   "path": "3D/3DCUBE2",
+   "bytes": 1008,
+   "sha256": "30fe9fc6da4f946a61cee07d02cc39411e56fc5c79743b2515a4dd2530b85ea6",
+   "kind": "built",
+   "from": "programs/demos/3dcube2/"
+  },
+  {
+   "path": "3D/3DWAV",
+   "bytes": 458,
+   "sha256": "457b4ff09e4619ed29792268fd33ec5c2f31be90d5ff82629818f139ee10b122",
+   "kind": "built",
+   "from": "programs/demos/3dwav/"
+  },
+  {
+   "path": "3D/CROWNSCR",
+   "bytes": 1266,
+   "sha256": "a7852704510f4ae4f364f463802285238c5e3b7c2c9c9db46b2876fe8a534b04",
+   "kind": "built",
+   "from": "programs/demos/crownscr/"
+  },
+  {
+   "path": "3D/FREE3D04",
+   "bytes": 16436,
+   "sha256": "165199dbc26d03d555f56dbb40adbed90d4ed80d7ec33616cc655b4d9a2a3aea",
+   "kind": "built",
+   "from": "programs/demos/free3d04/"
+  },
+  {
+   "path": "3D/GEARS",
+   "bytes": 2093,
+   "sha256": "86f767af385b251830283d61dfba7c0ca00fab1c7fa73771d4f47f234576bc9f",
+   "kind": "built",
+   "from": "programs/develop/libraries/TinyGL/asm_fork/examples/"
+  },
+  {
+   "path": "3D/HOUSE.3DS",
+   "bytes": 1738,
+   "sha256": "e7351176228b847d333531d2d7ec5241d504c96cc537070cc356343c2d1db5b0",
+   "kind": "data",
+   "from": "data/common/3d/house.3ds"
+  },
+  {
+   "path": "3D/RAY",
+   "bytes": 1426,
+   "sha256": "2f523267cfc58565fcbce7921df76c34b5df4e6b3300f2a982ca945734529f3a",
+   "kind": "built",
+   "from": "programs/demos/ray/"
+  },
+  {
+   "path": "3D/VIEW3DS",
+   "bytes": 15251,
+   "sha256": "c6b5b545e1e78ff6e6a8d576d5835e8f98af202f23a2200197e48324328e916f",
+   "kind": "built",
+   "from": "programs/demos/view3ds/"
+  },
+  {
+   "path": "@DOCKY",
+   "bytes": 2520,
+   "sha256": "5e7c1c64c8aa7543cd9c69ce9c9df8655da7ea9b9216eb98c988d5bbc8e43505",
+   "kind": "built",
+   "from": "programs/system/docky/"
+  },
+  {
+   "path": "@HA",
+   "bytes": 1093,
+   "sha256": "b905c3b6628b86604805fb7fd6b03fcbad4009b435607d2b3f98c598eaf587d3",
+   "kind": "built",
+   "from": "programs/other/ha/"
+  },
+  {
+   "path": "@ICON",
+   "bytes": 5263,
+   "sha256": "9a4dc6b87b1edc6f89b8cc8ee7ccd4ff4bf17a9a40cf44da9fc1ceb675896236",
+   "kind": "built",
+   "from": "programs/system/icon_new/"
+  },
+  {
+   "path": "@MENU",
+   "bytes": 1920,
+   "sha256": "7a60969fc8f16750a36e54387025acd0bcddcb7ca3b8494f719476607a675c6f",
+   "kind": "built",
+   "from": "programs/system/menu/"
+  },
+  {
+   "path": "@NOTIFY",
+   "bytes": 1894,
+   "sha256": "574ae03671b888733ee44049edb1f1ef478656f2fd7619bcf5fc3d6ea677ca22",
+   "kind": "built",
+   "from": "programs/system/notify3/"
+  },
+  {
+   "path": "@OPEN",
+   "bytes": 2889,
+   "sha256": "eb77546bb1beb73fbac6fa946b5cfa508d65e9bc9d569ca0d4551188d245598b",
+   "kind": "built",
+   "from": "programs/system/open/"
+  },
+  {
+   "path": "@RESHARE",
+   "bytes": 1797,
+   "sha256": "f73e3e5a9f6fc9d272c43d15f30de7c232146a92dcf07724f64ece3cea6518c8",
+   "kind": "built",
+   "from": "programs/system/reshare/"
+  },
+  {
+   "path": "@SS",
+   "bytes": 694,
+   "sha256": "d4059122e01d34fcb8f2ac8799b55e145689b7ad18b81da084c2c18822997c34",
+   "kind": "built",
+   "from": "programs/system/scrsaver/"
+  },
+  {
+   "path": "@TASKBAR",
+   "bytes": 5171,
+   "sha256": "9ca1919d7d27ebac3ef7dd4ba41c318c626a4cda88d7000c48dba29229fdd75f",
+   "kind": "built",
+   "from": "programs/system/taskbar/"
+  },
+  {
+   "path": "@VOLUME",
+   "bytes": 2253,
+   "sha256": "15a2cdbe98a82008519acc556ac4909c570da2cf0f4842dfb18c59151d4dbb0f",
+   "kind": "built",
+   "from": "programs/media/volume/"
+  },
+  {
+   "path": "ACLOCK",
+   "bytes": 1296,
+   "sha256": "2e1d6c6ebb93fa5549bfaebf697ad153924d77a502be61af4f252653ab91d95c",
+   "kind": "built",
+   "from": "programs/demos/aclock/"
+  },
+  {
+   "path": "APM",
+   "bytes": 803,
+   "sha256": "bd9609930387d0ec115303edf7193a0a13518922a36a27440a14b91e5515687c",
+   "kind": "built",
+   "from": "programs/system/apm/"
+  },
+  {
+   "path": "CALC",
+   "bytes": 1561,
+   "sha256": "0f03fb40183c2cbbadf37ff5d494e38b7448d5ea4b47fcc4a60df12a9ccd25d4",
+   "kind": "built",
+   "from": "programs/other/calc/"
+  },
+  {
+   "path": "CALCPLUS",
+   "bytes": 2248,
+   "sha256": "73de6c5fd6ed7b4ffda4185e649067852b35ebb29e2ed48afef2604506bb5880",
+   "kind": "built",
+   "from": "programs/other/calcplus/"
+  },
+  {
+   "path": "CALENDAR",
+   "bytes": 1922,
+   "sha256": "6027c7e6a527a02ddd545c5b36f2ea39b5d0641d4a6a5f8c76fabe7eac0b9474",
+   "kind": "built",
+   "from": "programs/system/calendar/"
+  },
+  {
+   "path": "COLRDIAL",
+   "bytes": 2164,
+   "sha256": "06cd8f3fa41f4ba6db9c1583c3d7365ffc3a70eb8748204ea29e23dd299889b8",
+   "kind": "built",
+   "from": "programs/system/colrdial/"
+  },
+  {
+   "path": "CPU",
+   "bytes": 2028,
+   "sha256": "4615481018f9adac9064266c53051a43738c23a8fd544c05ced5a16415f36c6a",
+   "kind": "built",
+   "from": "programs/system/cpu/"
+  },
+  {
+   "path": "CPUID",
+   "bytes": 14531,
+   "sha256": "bf96b308638c78032a0cf57b81d8fd1b378a93a8b137e0e4d554a7e2aac59082",
+   "kind": "built",
+   "from": "programs/testing/cpuid/"
+  },
+  {
+   "path": "CROPFLAT",
+   "bytes": 178,
+   "sha256": "ad5b3236fb12ccc66cc29d13a3d520736dfd865c0dc11440563d45a81b193465",
+   "kind": "built",
+   "from": "programs/system/cropflat/"
+  },
+  {
+   "path": "DEFAULT.SKN",
+   "bytes": 1024,
+   "sha256": "1c51b28a5257d23d1255331afd7175f1f880d61e6c5e6ed618a07da54f68e3bc",
+   "kind": "built",
+   "from": "skins/../skins/Leency/Shkvorka/"
+  },
+  {
+   "path": "DEMOS/BCDCLK",
+   "bytes": 275,
+   "sha256": "9e7534a6a1bebfab783f83dbcae04279b6880e1d6cf937169c31d6e423e3400b",
+   "kind": "built",
+   "from": "programs/demos/bcdclk/"
+  },
+  {
+   "path": "DEMOS/BUDHBROT",
+   "bytes": 800,
+   "sha256": "901068f43d2e6ef71d60ca92bec9d719d0fbf7a9c480fccffe401a9efbd6bd6f",
+   "kind": "built",
+   "from": "programs/demos/buddhabrot/"
+  },
+  {
+   "path": "DEMOS/EYES",
+   "bytes": 897,
+   "sha256": "09a41bec67baf8827f97d610829b73995217278fc685597d3e332d65381ee2c1",
+   "kind": "built",
+   "from": "programs/demos/eyes/"
+  },
+  {
+   "path": "DEMOS/FIREWORK",
+   "bytes": 723,
+   "sha256": "a1042fdb299dd85530bff483a30b2db54df697dc2d35c56c5bbca7bba4f96656",
+   "kind": "built",
+   "from": "programs/demos/firework/"
+  },
+  {
+   "path": "DEMOS/MOVBACK",
+   "bytes": 480,
+   "sha256": "6b2a7fa6408f9b041ed5d6770905f202b2b0e93b3522bd848ef7e3f050fffe8f",
+   "kind": "built",
+   "from": "programs/demos/movback/"
+  },
+  {
+   "path": "DEMOS/PLASMA",
+   "bytes": 448,
+   "sha256": "6e604740a4941994b1732762c505200cd7281b3619d1462e3e05d38e9ecf3cdb",
+   "kind": "built",
+   "from": "programs/demos/plasma/"
+  },
+  {
+   "path": "DEMOS/SPIRAL",
+   "bytes": 776,
+   "sha256": "4ef0a1038da86ab7ed7262bf6dc7ad318e6e7c3cf7a5068c742bfd6d0832e0ab",
+   "kind": "built",
+   "from": "programs/demos/spiral/"
+  },
+  {
+   "path": "DEMOS/TINYFRAC",
+   "bytes": 654,
+   "sha256": "c7f77d5f595768d5aad886884610dd4148d7e1351250b6486d45899ecc3a1f23",
+   "kind": "built",
+   "from": "programs/demos/tinyfrac/"
+  },
+  {
+   "path": "DEMOS/TRANTEST",
+   "bytes": 675,
+   "sha256": "8315bd739745bde871c39112a1b57119adfc8afc2458c0a0c5fe49ba66da6de4",
+   "kind": "built",
+   "from": "programs/demos/trantest/"
+  },
+  {
+   "path": "DEMOS/TUBE",
+   "bytes": 491,
+   "sha256": "640880c25880aca2c956d7b5006bb305223a5f6f238adaacc268f058449d0c0e",
+   "kind": "built",
+   "from": "programs/demos/tube/"
+  },
+  {
+   "path": "DEMOS/UNVWATER",
+   "bytes": 444,
+   "sha256": "705c751e5cb9030dff95192c1807d2cc4b0911a73b3a8d8639a498fb91144383",
+   "kind": "built",
+   "from": "programs/demos/unvwater/"
+  },
+  {
+   "path": "DEMOS/WEB",
+   "bytes": 584,
+   "sha256": "39aad6526c5beb3380678e76cff8dd2366f8e9fcdd5a4aef9a6cd9f182b1684a",
+   "kind": "built",
+   "from": "programs/demos/web/"
+  },
+  {
+   "path": "DEMOS/ZEROLINE",
+   "bytes": 684,
+   "sha256": "b59a3a6df99cccd9c415593745e92c7f64db4d6d85e471d985f2387359c647b0",
+   "kind": "built",
+   "from": "programs/demos/zeroline/"
+  },
+  {
+   "path": "DEVELOP/BACKY",
+   "bytes": 2616,
+   "sha256": "66508733ea0dbc7e2eb06c3a36d93fa12905618f48de3816300a06e51c0d1568",
+   "kind": "source",
+   "from": "./../programs/develop/backy/Backy"
+  },
+  {
+   "path": "DEVELOP/BOARD",
+   "bytes": 1017,
+   "sha256": "f20c22760ac3ee96554da8629249c0d17cf33882664e3366fff8d131473afdcc",
+   "kind": "built",
+   "from": "programs/system/board/"
+  },
+  {
+   "path": "DEVELOP/CHARSETS",
+   "bytes": 1690,
+   "sha256": "ea74d2bb3e7b7fbce39c3b2f9caf8a6b0d61e4dc2acced20ca4c63f23e2a3572",
+   "kind": "built",
+   "from": "programs/develop/charsets/"
+  },
+  {
+   "path": "DEVELOP/COBJ",
+   "bytes": 256,
+   "sha256": "2f2d081c3a79fb1e5b5bc8b651f266a614ae7ba608d9156e4553c1491802e1dc",
+   "kind": "built",
+   "from": "programs/develop/cObj/"
+  },
+  {
+   "path": "DEVELOP/DBGBOARD",
+   "bytes": 1421,
+   "sha256": "234475e9ae7e4912dfb69926fa585ff52534f2571ba03cb522fd84ecd93a6bae",
+   "kind": "built",
+   "from": "programs/system/dbgboard/"
+  },
+  {
+   "path": "DEVELOP/ENTROPYV",
+   "bytes": 618,
+   "sha256": "ffb7414e740445dcfbc7f6504e7d26df01d4c1b79121bc5d18c06e6d66f37213",
+   "kind": "built",
+   "from": "programs/develop/entropyview/"
+  },
+  {
+   "path": "DEVELOP/FASM",
+   "bytes": 46500,
+   "sha256": "4e33d9ad5de50e40b1406a94210493a3ae9ec2f07a0977f884b09bd271eaa603",
+   "kind": "built",
+   "from": "programs/develop/fasm/1.73/"
+  },
+  {
+   "path": "DEVELOP/GENFILES",
+   "bytes": 768,
+   "sha256": "d4ae730237cc95ac2fe98eafc328462eed8b6453f0072dd3b1069856cc70c3d7",
+   "kind": "built",
+   "from": "programs/testing/genfiles/"
+  },
+  {
+   "path": "DEVELOP/H2D2B",
+   "bytes": 1195,
+   "sha256": "a47fd1b76a6f60fb807dd4b4a23a42937a46679125fe224c1ae91054b24d65da",
+   "kind": "built",
+   "from": "programs/develop/h2d2b/"
+  },
+  {
+   "path": "DEVELOP/HEED",
+   "bytes": 7977,
+   "sha256": "6a7761c74c75ba2fb6f74c38d7a6c633434e530c27d07e3a0ca760f051e2d4e5",
+   "kind": "built",
+   "from": "programs/develop/heed/"
+  },
+  {
+   "path": "DEVELOP/MSTATE",
+   "bytes": 371,
+   "sha256": "d7583e6d3078fe6077828a8247fb39ca84864e4eabd3f3bbc1b676d9ba6964e6",
+   "kind": "built",
+   "from": "programs/develop/mstate/"
+  },
+  {
+   "path": "DEVELOP/MTDBG",
+   "bytes": 12694,
+   "sha256": "684f42ad33cb1c5358826546caab1e2f9be63a333e20483e43403a79e1ed67e3",
+   "kind": "built",
+   "from": "programs/develop/mtdbg/"
+  },
+  {
+   "path": "DEVELOP/PIPET",
+   "bytes": 989,
+   "sha256": "12e2a8d0efb64101054e86bd8c9a18ead599c39c7efa0a21ba9b9bff29109c88",
+   "kind": "built",
+   "from": "programs/other/pipet/"
+  },
+  {
+   "path": "DEVELOP/SCANCODE",
+   "bytes": 747,
+   "sha256": "1f640e90a36f6906c74802428b2eef1f0696cdd159b0b5d815f41f398174429a",
+   "kind": "built",
+   "from": "programs/develop/scancode/"
+  },
+  {
+   "path": "DISPTEST",
+   "bytes": 1437,
+   "sha256": "9f9258fff8ae3a03b05d1ac389a2c0aa2362d2f8b0e0e1818d63a3e53cef5cd1",
+   "kind": "built",
+   "from": "programs/testing/disptest/"
+  },
+  {
+   "path": "DOCPACK",
+   "bytes": 49486,
+   "sha256": "6847fddea37b41f4631af777ad443868932d669b3afd784653087c16586c4b15",
+   "kind": "built",
+   "from": "programs/system/docpack/"
+  },
+  {
+   "path": "DRIVERS/3C59X.SYS",
+   "bytes": 3888,
+   "sha256": "520c2764eaa927b8d3c4f7d1c34c7422f8690b3f5024ce028fcb5bb5600d470e",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/AC97.SYS",
+   "bytes": 3317,
+   "sha256": "99f312af7d280da0b2272be3d73f7bd058f3942b48b1029dc9449674dcb746a9",
+   "kind": "built",
+   "from": "drivers/audio/"
+  },
+  {
+   "path": "DRIVERS/AR81XX.SYS",
+   "bytes": 3346,
+   "sha256": "200dca1d9c32ba8f4bab276bff08b7affdbf560f957692b5279a57bd9be5ba15",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/CMI8738.SYS",
+   "bytes": 1367,
+   "sha256": "d6e63fc196a6e3b7facacbbe86b6894500557099cb16917eb7a824a57f217cba",
+   "kind": "built",
+   "from": "drivers/audio/"
+  },
+  {
+   "path": "DRIVERS/COMMOUSE.SYS",
+   "bytes": 926,
+   "sha256": "e9d3e7c7d5dc53c8bf1d3e4d951e40757ea17c5701ee078dd33966facf50f653",
+   "kind": "built",
+   "from": "drivers/mouse/"
+  },
+  {
+   "path": "DRIVERS/DEC21X4X.SYS",
+   "bytes": 2732,
+   "sha256": "1367542ff1907647ba2095a078641b3df1439583ebdc4f54e3f81776a0206379",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/EHCI.SYS",
+   "bytes": 4675,
+   "sha256": "9e469493e11466f6ca1341f000b789d1fad1699ac539631e771f8e4d388c133d",
+   "kind": "built",
+   "from": "drivers/usb/"
+  },
+  {
+   "path": "DRIVERS/EMU10K1X.SYS",
+   "bytes": 2664,
+   "sha256": "a058d8f049dc5f1bdde2628c465475eb91a3ccbc237f14d77dc8955d45795ee5",
+   "kind": "built",
+   "from": "drivers/audio/"
+  },
+  {
+   "path": "DRIVERS/ES1371.SYS",
+   "bytes": 1823,
+   "sha256": "48aad20611cc552c6a8fc4cd81b4596671a64d62b24b0f4836c8c0f0f53695f6",
+   "kind": "built",
+   "from": "drivers/audio/"
+  },
+  {
+   "path": "DRIVERS/FM801.SYS",
+   "bytes": 2588,
+   "sha256": "f13c482448825b596e1d1ebcc2952b4b82c9a1e88b985f819ceb65cc136748b0",
+   "kind": "built",
+   "from": "drivers/audio/"
+  },
+  {
+   "path": "DRIVERS/FORCEDETH.SYS",
+   "bytes": 2867,
+   "sha256": "2e874ed0f169a15fe8f785c3feaa7cbc30df33036cbf48368453e93fe17efffb",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/HDAUDIO.SYS",
+   "bytes": 8634,
+   "sha256": "ce813d2a2756b0d897e28d17175c1b324f0c425f58c60cfe178e30b51f249066",
+   "kind": "built",
+   "from": "drivers/audio/intel_hda/"
+  },
+  {
+   "path": "DRIVERS/I2CHID.SYS",
+   "bytes": 8902,
+   "sha256": "1b27db7c9b0a3bfbd33a657fdbdf83f1104a62a5d1dfb78ecce3f0ae2318aeae",
+   "kind": "built",
+   "from": "drivers/i2chid/"
+  },
+  {
+   "path": "DRIVERS/I8254X.SYS",
+   "bytes": 1713,
+   "sha256": "a606b45a9963f1911a03e5b972c2a948e960cdb5acc367d03df086526209b7db",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/I8255X.SYS",
+   "bytes": 2462,
+   "sha256": "a8770c8802d96162de92dc1d9b93f7c30bc3e793fc9e6fe1716a50e8e17d6882",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/INFINITY.SYS",
+   "bytes": 3641,
+   "sha256": "f0133822b7bd7f3ab5cae1bab618f7a4ad7046aa04f9a7a3ca1c575616f5af99",
+   "kind": "built",
+   "from": "drivers/audio/infinity/"
+  },
+  {
+   "path": "DRIVERS/MTD80X.SYS",
+   "bytes": 1771,
+   "sha256": "d3ec5a9e16b747d9a37fd430fd2c3629ca9bd1ae53e4933a2469522b352bf27f",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/OHCI.SYS",
+   "bytes": 2951,
+   "sha256": "7495cb856679fb6b52f0239bc42c83e693c582e639648643719231e339ffbc59",
+   "kind": "built",
+   "from": "drivers/usb/"
+  },
+  {
+   "path": "DRIVERS/PCNET32.SYS",
+   "bytes": 2569,
+   "sha256": "e91436ece2b645e1b9a26f241f82c0cba6033e3810e1b667572acee2388c6e3c",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/PS2MOUSE.SYS",
+   "bytes": 952,
+   "sha256": "983bf73798925fb1faacaea0aeff9e5becfb794d1f0cf26d8ff8633ba43a9490",
+   "kind": "built",
+   "from": "drivers/mouse/ps2mouse4d/"
+  },
+  {
+   "path": "DRIVERS/R6040.SYS",
+   "bytes": 2102,
+   "sha256": "d1451827e12017a6280e972c1c41d8012c93d9d9a4b5a740374843d9a48a1134",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/RDC.SYS",
+   "bytes": 871,
+   "sha256": "f9b6c238babf77277579ff0f7086b97a3b565415293f11e8d68faeffb44fcbf7",
+   "kind": "built",
+   "from": "drivers/video/"
+  },
+  {
+   "path": "DRIVERS/RHINE.SYS",
+   "bytes": 2155,
+   "sha256": "aa6be816110e680e8803a3449b922d4b398a11cc1b5c25aad3c95dd203bb1143",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/RTL8029.SYS",
+   "bytes": 1744,
+   "sha256": "175fb5614018e869351a00ffe348619c434981c12c3277741447b20d1fd59808",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/RTL8139.SYS",
+   "bytes": 2045,
+   "sha256": "ab66a07bc55be3320d3023cbab51cd140ac8715bdf0b39408fe9469f8068fd79",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/RTL8169.SYS",
+   "bytes": 2975,
+   "sha256": "d46f2472cf00ba826b74337afc59b5a6d0ec41ac18e83ec3409b33944dca973d",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/SB16.SYS",
+   "bytes": 1390,
+   "sha256": "e3d73cbbb39bb51f2b666cb1ff54e36fc89a20be72b7a75b171643897e22e735",
+   "kind": "built",
+   "from": "drivers/audio/sb16/"
+  },
+  {
+   "path": "DRIVERS/SDHCI.SYS",
+   "bytes": 3667,
+   "sha256": "32b2b502717ceffa7d18969d1b7157a5b220c40a69b381c3b2ea5d0e3848bbbe",
+   "kind": "source",
+   "from": "drivers/sdhci/sdhci.sys"
+  },
+  {
+   "path": "DRIVERS/SERIAL.SYS",
+   "bytes": 2103,
+   "sha256": "7b7987771abe0f5cbeb3b5a55f2a0cc8caef2f8806b95e33823e7f6c71bde451",
+   "kind": "built",
+   "from": "drivers/serial/"
+  },
+  {
+   "path": "DRIVERS/SIS.SYS",
+   "bytes": 2897,
+   "sha256": "cf6cc12df04437f79566a6589622b419c7a1903a8cfb48022d57b62a44dc4bd5",
+   "kind": "built",
+   "from": "drivers/audio/"
+  },
+  {
+   "path": "DRIVERS/SIS900.SYS",
+   "bytes": 2018,
+   "sha256": "1e995ee09755c16922eac703042bc90f62bf18f5b8bfdbdb5e01218eea4a8c51",
+   "kind": "built",
+   "from": "drivers/ethernet/"
+  },
+  {
+   "path": "DRIVERS/SOUND.SYS",
+   "bytes": 1224,
+   "sha256": "b74c98e58d6c0704fb5f1e026a886c0380fe9c7bad4e610b82ef3e3c4984ccab",
+   "kind": "built",
+   "from": "drivers/audio/"
+  },
+  {
+   "path": "DRIVERS/TMPDISK.SYS",
+   "bytes": 1086,
+   "sha256": "12f1a95a56317decdf266651020b2dde8f2951bf8da6e326f277276c5a8d1456",
+   "kind": "built",
+   "from": "drivers/disk/"
+  },
+  {
+   "path": "DRIVERS/UHCI.SYS",
+   "bytes": 3399,
+   "sha256": "3086ce16137b873e461551dfc2ffe0d2ff7f09600842f210a5bedd5ae9cfa1e9",
+   "kind": "built",
+   "from": "drivers/usb/"
+  },
+  {
+   "path": "DRIVERS/USBCDC.SYS",
+   "bytes": 4787,
+   "sha256": "431f820acb8efc1e1e7cda5fc61f2c3093c987d89b91e978da04e681849e3528",
+   "kind": "built",
+   "from": "drivers/usb/usbnet/"
+  },
+  {
+   "path": "DRIVERS/USBFTDI.SYS",
+   "bytes": 2651,
+   "sha256": "56742df61353c63f11412561c06b7ea584f04e1dd30364d6f6c0d01e5100d9fe",
+   "kind": "built",
+   "from": "drivers/usb/usbftdi/"
+  },
+  {
+   "path": "DRIVERS/USBHID.SYS",
+   "bytes": 4028,
+   "sha256": "69c910306ac9f2ceccdee31bc42c76f5f6291e7c195fe0fe1e70a56f87149b63",
+   "kind": "built",
+   "from": "drivers/usb/usbhid/"
+  },
+  {
+   "path": "DRIVERS/USBOTHER.SYS",
+   "bytes": 1146,
+   "sha256": "042cd14ed86b5754643e3d78a06e8a882abd620e5ca8283be6c6acdd9ea52885",
+   "kind": "built",
+   "from": "drivers/usb/usbother/"
+  },
+  {
+   "path": "DRIVERS/USBRNDIS.SYS",
+   "bytes": 3123,
+   "sha256": "7f5cb7018b95d3e004cf803ab2ce424e62931bb1eb6472277f3f4adb5e694559",
+   "kind": "built",
+   "from": "drivers/usb/usbnet/"
+  },
+  {
+   "path": "DRIVERS/USBSTOR.SYS",
+   "bytes": 4276,
+   "sha256": "e73bce104109f2da3254266cd80dbfd91ad2bdd1d18333f1a0af3711e9861f5f",
+   "kind": "built",
+   "from": "drivers/usb/"
+  },
+  {
+   "path": "DRIVERS/VIDINTEL.SYS",
+   "bytes": 1143,
+   "sha256": "8252700c56b6a5ed7ba609a490b277c83c5f245cc050173a8e71fa8da4370c6b",
+   "kind": "built",
+   "from": "drivers/video/"
+  },
+  {
+   "path": "DRIVERS/VIRTDISK.SYS",
+   "bytes": 1243,
+   "sha256": "a3b1cf7415f166d32b64d1cb62dd6792192e3c731a57b6bed7b89c5e825f06d5",
+   "kind": "built",
+   "from": "drivers/disk/"
+  },
+  {
+   "path": "DRIVERS/VT823X.SYS",
+   "bytes": 2925,
+   "sha256": "41d909edc2e56ada72ad96519989cff492f166304b514df5db99aae6245277b6",
+   "kind": "built",
+   "from": "drivers/audio/"
+  },
+  {
+   "path": "DRIVERS/XHCI.SYS",
+   "bytes": 7222,
+   "sha256": "c3b7d008a6ad2346f9e3e0681d9ec3b6bd7fbd6621ccf60172fab4e25142801e",
+   "kind": "built",
+   "from": "drivers/usb/xhci/"
+  },
+  {
+   "path": "END",
+   "bytes": 1164,
+   "sha256": "6fe996e0121217f44b539d680caeb0b918207ea9e61c1340e54742b004a91191",
+   "kind": "built",
+   "from": "programs/system/end/light/"
+  },
+  {
+   "path": "ESKIN",
+   "bytes": 576,
+   "sha256": "616377b84067a45954460740c6fb4c1d6f3ea834b68cb0ab68c3d1545b3554e4",
+   "kind": "built",
+   "from": "programs/system/eskin/"
+  },
+  {
+   "path": "EXAMPLE.ASM",
+   "bytes": 5893,
+   "sha256": "3ac6ad00ff089787b323eae80be2bc504c70cd1939be14efcfc8c928436dbb8c",
+   "kind": "source",
+   "from": "./../programs/develop/examples/example/example.asm"
+  },
+  {
+   "path": "File Managers/ICON2EXT.INI",
+   "bytes": 1380,
+   "sha256": "701c1556f63c9450f052b1dfc15c7e6d1a78e13dd498646daa555315d9c368df",
+   "kind": "data",
+   "from": "data/common/File Managers/icon2ext.ini"
+  },
+  {
+   "path": "File Managers/KFAR",
+   "bytes": 26734,
+   "sha256": "d30ae872113c3fbdf1812e4be10411b175023cab4ee3d474af4164089062f9d8",
+   "kind": "built",
+   "from": "programs/fs/kfar/"
+  },
+  {
+   "path": "File Managers/KFAR.INI",
+   "bytes": 3078,
+   "sha256": "87061de573d0ca109210ef85ef2014139bb397b77a5139e3dd500d1537a835c1",
+   "kind": "data",
+   "from": "data/common/File Managers/kfar.ini"
+  },
+  {
+   "path": "File Managers/OPENDIAL",
+   "bytes": 5242,
+   "sha256": "73e23492cbc620a50a3dad6fbcc3609e273f7beff2bef153a4cdf059f881d295",
+   "kind": "built",
+   "from": "programs/fs/opendial/"
+  },
+  {
+   "path": "GAMES/15",
+   "bytes": 830,
+   "sha256": "7a6fbfee763a70cd718395c7d5a3e837d9420a8d308b034ebbe5f0366a3496e8",
+   "kind": "built",
+   "from": "programs/games/15/"
+  },
+  {
+   "path": "GAMES/C4",
+   "bytes": 3481,
+   "sha256": "2b73e4b12887a9545eeae37802b4775e120d8a47c89c84de061847f50d460e1d",
+   "kind": "built",
+   "from": "programs/games/c4/"
+  },
+  {
+   "path": "GAMES/FREECELL",
+   "bytes": 1833,
+   "sha256": "051ed1624ecef18252087bc71b4fabebc5e1727ae9ae13ec20561cb5d8966e02",
+   "kind": "built",
+   "from": "programs/games/max-freecell/"
+  },
+  {
+   "path": "GAMES/GOMOKU",
+   "bytes": 1423,
+   "sha256": "a68c9df474f787a3397e8f8dcb0d68c3c496c1807ec0f3257a41bec489cb130a",
+   "kind": "built",
+   "from": "programs/games/gomoku/"
+  },
+  {
+   "path": "GAMES/LIGHTS",
+   "bytes": 387,
+   "sha256": "307a1a94e298fc3f2cf9cff3d8f23dba9bb3a17b1d566fd38c8e973601f2384e",
+   "kind": "built",
+   "from": "programs/games/sq_game/"
+  },
+  {
+   "path": "GAMES/LINES",
+   "bytes": 1165,
+   "sha256": "3497feb9a5041492ab0664f6acbd2045c9848e294e04764924a10c9414bfc47c",
+   "kind": "built",
+   "from": "programs/games/lines/"
+  },
+  {
+   "path": "GAMES/MSQUARE",
+   "bytes": 1250,
+   "sha256": "4f3b70b0fb71f740b8ebb1ba06e6e8ce66fbecf5c9b2d2d730d248288aa58440",
+   "kind": "built",
+   "from": "programs/games/MSquare/"
+  },
+  {
+   "path": "GAMES/PIPES",
+   "bytes": 6039,
+   "sha256": "aba764540011b30816c3a3f8e3c6b10f5846ab7b16649bca6eebdee5f1d3534a",
+   "kind": "built",
+   "from": "programs/games/pipes/"
+  },
+  {
+   "path": "GAMES/PONG",
+   "bytes": 1850,
+   "sha256": "19b0e311b296426e065f9e759918ea1f5bb42cae34d9a443b14c45abbb7d142c",
+   "kind": "built",
+   "from": "programs/games/pong/"
+  },
+  {
+   "path": "GAMES/PONG3",
+   "bytes": 1709,
+   "sha256": "d2524c149fc9b7be1ed1c36093b57e5b514de9c4699641209606d82b7b694930",
+   "kind": "built",
+   "from": "programs/games/pong3/"
+  },
+  {
+   "path": "GAMES/RSQUARE",
+   "bytes": 3260,
+   "sha256": "a5ed0263f04601a1f1dafdf22211115a61db2ff327895da5d5acab34df6c109d",
+   "kind": "built",
+   "from": "programs/games/rsquare/"
+  },
+  {
+   "path": "GAMES/SNAKE",
+   "bytes": 6687,
+   "sha256": "95c8567de497848f39a0303682148f7eb05bbd8b1bfef43ce77e10d345b76180",
+   "kind": "built",
+   "from": "programs/games/snake/"
+  },
+  {
+   "path": "GAMES/SUDOKU",
+   "bytes": 2553,
+   "sha256": "c71c2131f42c19fc9ae181ebccc8ac636c46cd50f24ebae11f90963603b1d07b",
+   "kind": "built",
+   "from": "programs/games/sudoku/"
+  },
+  {
+   "path": "GAMES/SW",
+   "bytes": 1933,
+   "sha256": "869edc7748baed2dd80f12661745b094890fcda29ec3c6a1e6313d018b37169b",
+   "kind": "built",
+   "from": "programs/games/sw/"
+  },
+  {
+   "path": "GAMES/TANKS",
+   "bytes": 5816,
+   "sha256": "55b30aa5b4766777bf0b1aba8906f62815cdba5725f4dd670be3fd205ddff944",
+   "kind": "built",
+   "from": "programs/games/tanks/"
+  },
+  {
+   "path": "GAMES/TETRIS",
+   "bytes": 1137,
+   "sha256": "cb3315234fb14cef2e89de2a78442a9ab4162cedd8795d92f42e662d28856ae1",
+   "kind": "built",
+   "from": "programs/games/tetris/"
+  },
+  {
+   "path": "GMON",
+   "bytes": 3804,
+   "sha256": "46db46a784747e84363a5245929c9dbbe2c4e4a3f55309cf30fdd97b0574b0a7",
+   "kind": "built",
+   "from": "programs/system/gmon/"
+  },
+  {
+   "path": "HACONFIG",
+   "bytes": 3513,
+   "sha256": "633dfd793e6548ca02d89c231fb3d0e0d649495caa50d445c49168ae1c92cb48",
+   "kind": "built",
+   "from": "programs/other/ha/"
+  },
+  {
+   "path": "HDD_INFO",
+   "bytes": 5138,
+   "sha256": "f86bbe6d3e63c7fe7266e7ce892a765300c4f2b0c6aba22ac25be4256a4f1949",
+   "kind": "built",
+   "from": "programs/system/hdd_info/"
+  },
+  {
+   "path": "HOME.PNG",
+   "bytes": 9406,
+   "sha256": "d576c022dc94fd38e8aa20a91020ccc73f295ea4fa851232c6864299dab56e65",
+   "kind": "data",
+   "from": "data/common/wallpapers/T_Home.png"
+  },
+  {
+   "path": "ICONS18.PNG",
+   "bytes": 11711,
+   "sha256": "65ed33c8eb3a1757219502548595b46e70938d398fbb4284d7f6356900473c78",
+   "kind": "data",
+   "from": "data/common/icons18.png"
+  },
+  {
+   "path": "ICONS32.PNG",
+   "bytes": 45729,
+   "sha256": "07f95b86ce9825a7027b9d6784d8f742f5146c3e5edbc693e83d48e9ff6e7f3b",
+   "kind": "data",
+   "from": "data/common/icons32.png"
+  },
+  {
+   "path": "INDEX.HTM",
+   "bytes": 482,
+   "sha256": "d045494432106e81a7b2857b5d1d0144d298e611cd39bcabec82ec1b34a1c2ba",
+   "kind": "data",
+   "from": "data/common/index_htm"
+  },
+  {
+   "path": "KBD",
+   "bytes": 1180,
+   "sha256": "1b30349afa9a15e05ee18872a9d07eb008b0f17256c30b14d0de3fd24a0e1c35",
+   "kind": "built",
+   "from": "programs/testing/kbd/"
+  },
+  {
+   "path": "KERNEL.MNT",
+   "bytes": 108631,
+   "sha256": "a5b4e99e2263be1a1e1b5b8aee0c8ef9f091cf8ee849481abae44cff68a74f13",
+   "kind": "built",
+   "from": "programs/../kernel/trunk/"
+  },
+  {
+   "path": "KPACK",
+   "bytes": 9834,
+   "sha256": "84f02195dfd43383fc1cc9a273f3098f0f1f21a6ca82944107dd2f3db68e541a",
+   "kind": "built",
+   "from": "programs/other/kpack/"
+  },
+  {
+   "path": "LANG.INC",
+   "bytes": 15,
+   "sha256": "2e833f5c4e4d06a6348c813819998e13360aa32cb8ddb1abbb7f07db3d6ef96f",
+   "kind": "data",
+   "from": "data/en_US/lang.inc"
+  },
+  {
+   "path": "LAUNCHER",
+   "bytes": 503,
+   "sha256": "00dff719b72562806f2ba43adb88907a2ae272d2f533ec00c12d8f225ee2fbee",
+   "kind": "built",
+   "from": "programs/system/launcher/"
+  },
+  {
+   "path": "LIB/ARCHIVER.OBJ",
+   "bytes": 23218,
+   "sha256": "f2dad1e6003790e237b11c3f9de42cd95026b36a63f5f1cbd24b67eaeb253887",
+   "kind": "built",
+   "from": "programs/fs/kfar/kfar_arc/"
+  },
+  {
+   "path": "LIB/BOX_LIB.OBJ",
+   "bytes": 17379,
+   "sha256": "7790fcf56a0f1649561eeee7d435364ac62dd2f1737e6451841b005fba423e48",
+   "kind": "built",
+   "from": "programs/develop/libraries/box_lib/"
+  },
+  {
+   "path": "LIB/BUF2D.OBJ",
+   "bytes": 6465,
+   "sha256": "82d965acdd89efa9dada9609d56af9f08ed33b1e2f52dbc2933b3e27a6c63024",
+   "kind": "built",
+   "from": "programs/develop/libraries/buf2d/"
+  },
+  {
+   "path": "LIB/CNV_PNG.OBJ",
+   "bytes": 3188,
+   "sha256": "bfea924896aa2de677323c92a3b949a01daa52be042edb39833a5aad1575bc93",
+   "kind": "built",
+   "from": "programs/media/zsea/plugins/png/"
+  },
+  {
+   "path": "LIB/CONSOLE.OBJ",
+   "bytes": 7557,
+   "sha256": "15e2ec4c65fca8481215fe5a601fd597ba6952efb94820367ec8a975373deef4",
+   "kind": "built",
+   "from": "programs/develop/libraries/console_coff/"
+  },
+  {
+   "path": "LIB/DLL.OBJ",
+   "bytes": 954,
+   "sha256": "57e48278552a33908616ab1ff4b4c3de6290185873c2a222d94553e5e7418f7f",
+   "kind": "built",
+   "from": "programs/develop/libraries/dll/"
+  },
+  {
+   "path": "LIB/HTTP.OBJ",
+   "bytes": 3410,
+   "sha256": "c0ec8c572fb9823dcd24f973e776b4df36dbd6e796e92acb6b65a8a7c544461c",
+   "kind": "built",
+   "from": "programs/develop/libraries/http/"
+  },
+  {
+   "path": "LIB/LIBCRASH.OBJ",
+   "bytes": 14148,
+   "sha256": "0f91614a15279b7c06dd182df040e753962d2600b4d2775cfdf066a2260f64e5",
+   "kind": "built",
+   "from": "programs/develop/libraries/libcrash/"
+  },
+  {
+   "path": "LIB/LIBGFX.OBJ",
+   "bytes": 660,
+   "sha256": "84af8e09c71c9ec2103a5efb034f50bb48dc42b74f0de46b6bce075c3275452a",
+   "kind": "built",
+   "from": "programs/develop/libraries/libs-dev/libgfx/"
+  },
+  {
+   "path": "LIB/LIBIMG.OBJ",
+   "bytes": 30916,
+   "sha256": "bd8b6417e03ae409b5dc17287dd5de30c39a6252351a9975664a9079916a3566",
+   "kind": "built",
+   "from": "programs/develop/libraries/libs-dev/libimg/"
+  },
+  {
+   "path": "LIB/LIBINI.OBJ",
+   "bytes": 2539,
+   "sha256": "0d2b67efe3244a7e02123fe26ec084b3da465a64d05113673cc45151351adef9",
+   "kind": "built",
+   "from": "programs/develop/libraries/libs-dev/libini/"
+  },
+  {
+   "path": "LIB/LIBIO.OBJ",
+   "bytes": 1106,
+   "sha256": "22628c1f7ac3e096ffe33fc19bd66c5f145a9ecee1ff7431c94158f12fdc7d98",
+   "kind": "built",
+   "from": "programs/develop/libraries/libs-dev/libio/"
+  },
+  {
+   "path": "LIB/MSGBOX.OBJ",
+   "bytes": 1021,
+   "sha256": "651b65b522036634775713cf453427d9e7c803f3e8471390d431eccf862be4b4",
+   "kind": "built",
+   "from": "programs/develop/libraries/msgbox/"
+  },
+  {
+   "path": "LIB/NETWORK.OBJ",
+   "bytes": 1802,
+   "sha256": "1c31c71c6234a4fa5bea0e2626955cf64af25715e7a4aa7161672314ce6e75a2",
+   "kind": "built",
+   "from": "programs/develop/libraries/network/"
+  },
+  {
+   "path": "LIB/PROC_LIB.OBJ",
+   "bytes": 902,
+   "sha256": "91cd7a16191878f9deea4941bf7f139005f7e88b8088ae299314bddae42ed6eb",
+   "kind": "built",
+   "from": "programs/develop/libraries/proc_lib/"
+  },
+  {
+   "path": "LIB/RASTERWORKS.OBJ",
+   "bytes": 1121,
+   "sha256": "76e4889a8a25185b1e3dc46497251a9d28b25307594ab950e28a161be0c6a1ec",
+   "kind": "built",
+   "from": "programs/develop/libraries/fontRasterWorks_unicode/"
+  },
+  {
+   "path": "LIB/SORT.OBJ",
+   "bytes": 859,
+   "sha256": "573375804e05f6ee27f1abbb44b856b97692ff375f77a479b1cbe5090d3504c3",
+   "kind": "built",
+   "from": "programs/develop/libraries/sorter/"
+  },
+  {
+   "path": "LIB/TINYGL.OBJ",
+   "bytes": 15625,
+   "sha256": "2d98ea2930abc9d9be761824613dc08d82632585456ca1824d72025b11d0fc85",
+   "kind": "built",
+   "from": "programs/develop/libraries/TinyGL/asm_fork/"
+  },
+  {
+   "path": "LOADDRV",
+   "bytes": 370,
+   "sha256": "05c33621216a8b3be740e49bc0f0381b2ebf16fa5dd028b2e7ce66f0c6d2b272",
+   "kind": "built",
+   "from": "programs/system/loaddrv/"
+  },
+  {
+   "path": "LOD",
+   "bytes": 433,
+   "sha256": "9268155b640274f900f547cff1ff4e17fec756be60f6dae305b262698b1628bd",
+   "kind": "built",
+   "from": "programs/fs/lod/"
+  },
+  {
+   "path": "MACROS.INC",
+   "bytes": 17773,
+   "sha256": "760d5459dbe3d959ba01b2760b6462714cfa8145820575b0ea7f7f82fe284381",
+   "kind": "source",
+   "from": "./../programs/macros.inc"
+  },
+  {
+   "path": "MADMOUSE",
+   "bytes": 145,
+   "sha256": "c5971bd4f59afd2937121874bd559400dcee5e7818bfc4f359b04d0178589aac",
+   "kind": "built",
+   "from": "programs/other/madmouse/"
+  },
+  {
+   "path": "MAGNIFY",
+   "bytes": 359,
+   "sha256": "753fade80dae0b10a937ed43e2a05ba5b3bdfd9f94b2b95241f049d2e813b62c",
+   "kind": "built",
+   "from": "programs/system/magnify/"
+  },
+  {
+   "path": "MEDIA/ANIMAGE",
+   "bytes": 10871,
+   "sha256": "faeea844a9a54fb8eef2de6f1f2e5d2571aa6b68a3e826cd179d27a2203a3cb5",
+   "kind": "built",
+   "from": "programs/media/animage/"
+  },
+  {
+   "path": "MEDIA/FILLSCR",
+   "bytes": 274,
+   "sha256": "426dbb3c6c441403bce09554f187a0e612ae26ffc0b1bd2f99c787ec3331ce2f",
+   "kind": "built",
+   "from": "programs/media/FillScr/"
+  },
+  {
+   "path": "MEDIA/KIV",
+   "bytes": 6192,
+   "sha256": "3778e13907fccb8d1f9059a2d9753702669e499c4ab7786e9c14025300726931",
+   "kind": "built",
+   "from": "programs/media/kiv/"
+  },
+  {
+   "path": "MEDIA/LISTPLAY",
+   "bytes": 1584,
+   "sha256": "ad21fc65929af174c8eccc53c9ee36bbca647d09574a6e70f0180959d76f3d54",
+   "kind": "built",
+   "from": "programs/media/listplay/"
+  },
+  {
+   "path": "MEDIA/MIDAMP",
+   "bytes": 7962,
+   "sha256": "e432201e5f86d9aaa7cf88771e1116d4b5a8841e3c54dd02feb214c38d15da8f",
+   "kind": "built",
+   "from": "programs/media/midamp/"
+  },
+  {
+   "path": "MEDIA/MP3INFO",
+   "bytes": 1730,
+   "sha256": "7ed25a1b36cf6b5c1554293d3d3d9d475309874e2de5e52603608a37f465c735",
+   "kind": "built",
+   "from": "programs/media/mp3info/"
+  },
+  {
+   "path": "MEDIA/PALITRA",
+   "bytes": 2815,
+   "sha256": "b04e3eb8635ba0a15ef805c3efd70841a02dd815bde62d43b398cd722f4826f2",
+   "kind": "built",
+   "from": "programs/media/palitra/"
+  },
+  {
+   "path": "MEDIA/PIANO",
+   "bytes": 1185,
+   "sha256": "726719ccfa0d930830d9307bdf81e3896c86520c848f4ad2d88443c6a5576d47",
+   "kind": "built",
+   "from": "programs/media/piano/"
+  },
+  {
+   "path": "MEDIA/PIANO.MAP",
+   "bytes": 256,
+   "sha256": "6e5dc73390e19ea613bfe35c549d58f4318682c8a50808a81c76667813d09db1",
+   "kind": "built",
+   "from": "programs/media/piano/"
+  },
+  {
+   "path": "MEDIA/STARTMUS",
+   "bytes": 155,
+   "sha256": "3bc6b417eeaa3038617989ac7ac3f26889f173277095a4535b66325ba8905eb7",
+   "kind": "built",
+   "from": "programs/media/startmus/"
+  },
+  {
+   "path": "MOUSEMUL",
+   "bytes": 469,
+   "sha256": "46b87be34107ee8b3680e92a022e3e914723240365bbbb95aa2fcea385e1c9be",
+   "kind": "built",
+   "from": "programs/system/mousemul/"
+  },
+  {
+   "path": "MOUSEPOS",
+   "bytes": 378,
+   "sha256": "dd1c89f63423c8f9bbdb8a233a1252aba550fef50a89d52f8b80ccf68ed1dd39",
+   "kind": "built",
+   "from": "programs/other/mousepos/"
+  },
+  {
+   "path": "MYKEY",
+   "bytes": 2782,
+   "sha256": "79c381eac5c4c994465a69ec075e8800e7f24ca003139d8e5ec750d83d04c0cc",
+   "kind": "built",
+   "from": "programs/system/MyKey/"
+  },
+  {
+   "path": "NETWORK/@ZEROCONF",
+   "bytes": 1859,
+   "sha256": "3e1f68cd711cd935a5bcada759b4e8b697f37c93402eadeef69485d865469521",
+   "kind": "built",
+   "from": "programs/network/zeroconf/"
+  },
+  {
+   "path": "NETWORK/FTPC",
+   "bytes": 6785,
+   "sha256": "60d98eb8124de968f0d9a6ee918764f74322cd37dc2077f79470db6bb69cd335",
+   "kind": "built",
+   "from": "programs/network/ftpc/"
+  },
+  {
+   "path": "NETWORK/FTPC.INI",
+   "bytes": 247,
+   "sha256": "9a3bde20d498a8a22dd6451553bc8a2088e3257aa4d5dfd419b90587a362363b",
+   "kind": "source",
+   "from": "./../programs/network/ftpc/ftpc.ini"
+  },
+  {
+   "path": "NETWORK/FTPD",
+   "bytes": 3851,
+   "sha256": "ce9bfa0df07da1340a81b40fa5a90b8907f0392cc727110aafede6edd44f9913",
+   "kind": "built",
+   "from": "programs/network/ftpd/"
+  },
+  {
+   "path": "NETWORK/FTPD.INI",
+   "bytes": 70,
+   "sha256": "6ee50bd05d2954ade5a79947c1c261c4e1283625db39170d346a2fe75bf2f899",
+   "kind": "data",
+   "from": "data/common/network/ftpd.ini"
+  },
+  {
+   "path": "NETWORK/HTTPGET",
+   "bytes": 1548,
+   "sha256": "ffc18cd70796c2f02e7cf602a1dd3f5b7f680d6bfbe4f957ed8363844a341d30",
+   "kind": "built",
+   "from": "programs/network/httpget/"
+  },
+  {
+   "path": "NETWORK/IRCC",
+   "bytes": 5870,
+   "sha256": "8e1a7c09c112ef68e1da04c008cd873a8e35cc16ddbeca195654b3b94cd47eb1",
+   "kind": "built",
+   "from": "programs/network/ircc/"
+  },
+  {
+   "path": "NETWORK/NETCFG",
+   "bytes": 2217,
+   "sha256": "51b784ee82e70d81a25d19ad1bf25bafce9aaf97a12c9d0c6bc807b3dfb374de",
+   "kind": "built",
+   "from": "programs/network/netcfg/"
+  },
+  {
+   "path": "NETWORK/NETSTAT",
+   "bytes": 2735,
+   "sha256": "6b58a52bf641056e776b7e0b5fbbcfdbe9f920ca0118f158020a6c869c99ac7a",
+   "kind": "built",
+   "from": "programs/network/netstat/"
+  },
+  {
+   "path": "NETWORK/NETSURF",
+   "bytes": 233,
+   "sha256": "5cda7cc9d5b7b96df19f20dd1c7914a49a374818ad9015007ea7672e75251f3b",
+   "kind": "built",
+   "from": "programs/network/netsurf/"
+  },
+  {
+   "path": "NETWORK/NSLOOKUP",
+   "bytes": 648,
+   "sha256": "b19c65a01ccdc5162fb69e139d9b493fea0fdc6328c3ddebaae0dd02a2eea89f",
+   "kind": "built",
+   "from": "programs/network/nslookup/"
+  },
+  {
+   "path": "NETWORK/PASTA",
+   "bytes": 904,
+   "sha256": "f41059d180e97b16a086ad8e915afc42a9b0942d3261de72814197aaea5a919a",
+   "kind": "built",
+   "from": "programs/network/pasta/"
+  },
+  {
+   "path": "NETWORK/PING",
+   "bytes": 1692,
+   "sha256": "5bb96e710c3c41331aaae7107d5ab494362dd43533a7bee114654a9e2c956dd0",
+   "kind": "built",
+   "from": "programs/network/ping/"
+  },
+  {
+   "path": "NETWORK/SNTP",
+   "bytes": 2124,
+   "sha256": "18838fdb7116214ee5b35a503c7c5498af91601e8bc7df6127cc06e53b73a5aa",
+   "kind": "built",
+   "from": "programs/network/sntp/"
+  },
+  {
+   "path": "NETWORK/SYNERGYC",
+   "bytes": 1302,
+   "sha256": "779632175a2245173d03ac278d5da9874137b68f79b5c7a331e0f8ab88dae6f3",
+   "kind": "built",
+   "from": "programs/network/synergyc/"
+  },
+  {
+   "path": "NETWORK/TELNET",
+   "bytes": 1132,
+   "sha256": "0d18cb66d79bb2edc507217abc58c564b8fe2e2d0b1291265a529a4186bce204",
+   "kind": "built",
+   "from": "programs/network/telnet/"
+  },
+  {
+   "path": "NETWORK/TFTPC",
+   "bytes": 1731,
+   "sha256": "4052028ee4b1733e77f60fedd508059515b7cd973aa3d82833ba5b67ccd010d0",
+   "kind": "built",
+   "from": "programs/network/tftpc/"
+  },
+  {
+   "path": "NETWORK/USERS.INI",
+   "bytes": 224,
+   "sha256": "f836f42f37b3905ccdc57af92dcd25ecf46044efad1ae54be48c183b9991b0b8",
+   "kind": "data",
+   "from": "data/common/network/users.ini"
+  },
+  {
+   "path": "NETWORK/VNCC",
+   "bytes": 5199,
+   "sha256": "6fe2bbc1324792ab0cab9701a181d73d241a2586bbca7f2edcd092f90d9a147a",
+   "kind": "built",
+   "from": "programs/network/vncc/"
+  },
+  {
+   "path": "NOTIFY3.PNG",
+   "bytes": 2930,
+   "sha256": "536e179123a12e6f67e59e3d348df2b0aacc90c046070a69d405ece268439c82",
+   "kind": "data",
+   "from": "data/common/notify3.png"
+  },
+  {
+   "path": "PCIDEV",
+   "bytes": 5437,
+   "sha256": "9bc5f5ef0a76cb355ce08f3d1bf5e6d6bca26b9aad32ede0a4441469d4bcb296",
+   "kind": "built",
+   "from": "programs/testing/pcidev/"
+  },
+  {
+   "path": "RDSAVE",
+   "bytes": 2230,
+   "sha256": "169be9fba0a93d1c3e8618a04731ea150d6a201ef6e06943f06d248c7087f18a",
+   "kind": "built",
+   "from": "programs/system/rdsave/"
+  },
+  {
+   "path": "RTFREAD",
+   "bytes": 7405,
+   "sha256": "8dd5cf2dd101a969627b93f9f14531a7fa723fd0b4efc90b8e70594ac4f7e7e9",
+   "kind": "built",
+   "from": "programs/other/rtfread/"
+  },
+  {
+   "path": "SCRSHOOT",
+   "bytes": 3911,
+   "sha256": "22520bb51bfe88b97223f9e8c580494b0b60b537848ff4a26475e9c7c6d16129",
+   "kind": "built",
+   "from": "programs/media/scrshoot/"
+  },
+  {
+   "path": "SEARCHAP",
+   "bytes": 874,
+   "sha256": "e027e2299318c71a9b6adee1531907c3370fd88a1f8fd22caa6882ea043a7ce4",
+   "kind": "built",
+   "from": "programs/system/searchap/"
+  },
+  {
+   "path": "SETTINGS/.shell",
+   "bytes": 65,
+   "sha256": "e96c3edd2899c4f9f4a9cb103923b270f9debf62bbd6531b03de039e85ebcf75",
+   "kind": "source",
+   "from": "./../programs/system/shell/bin/eng/.shell"
+  },
+  {
+   "path": "SETTINGS/APP.INI",
+   "bytes": 491,
+   "sha256": "bce0bbc5da47e041c808ba6883ce64aa5ecf7cc9516860241895c272357b0359",
+   "kind": "data",
+   "from": "data/common/settings/app.ini"
+  },
+  {
+   "path": "SETTINGS/APP_PLUS.INI",
+   "bytes": 979,
+   "sha256": "f209cc09d30a9c788b9d26daaa0c4c858572c9402211daa0391e125ae32604b6",
+   "kind": "data",
+   "from": "data/common/settings/app_plus.ini"
+  },
+  {
+   "path": "SETTINGS/ASSOC.INI",
+   "bytes": 2802,
+   "sha256": "be9dacf80429fce79e8f1f528f05f85ba5e1985f8b73fdfb0303582f284b6773",
+   "kind": "data",
+   "from": "data/common/settings/assoc.ini"
+  },
+  {
+   "path": "SETTINGS/AUTORUN.DAT",
+   "bytes": 1450,
+   "sha256": "ef6ebbee5ffc49f2221ac350b6fc056aa679abd0bb405292d61479fe4932a2d6",
+   "kind": "data",
+   "from": "data/common/settings/AUTORUN.DAT"
+  },
+  {
+   "path": "SETTINGS/CEDIT.INI",
+   "bytes": 6640,
+   "sha256": "f21d283fa543f1450bb2c1e7aadd8584fc1538c7a03004a96c16f1519bd04ff0",
+   "kind": "source",
+   "from": "./../programs/develop/cedit/CEDIT.INI"
+  },
+  {
+   "path": "SETTINGS/DOCKY.INI",
+   "bytes": 428,
+   "sha256": "d5abc787251d15afec20534f0b70eb188334b32c867083eef50f83461052c7c7",
+   "kind": "data",
+   "from": "data/common/settings/docky.ini"
+  },
+  {
+   "path": "SETTINGS/FB2READ.INI",
+   "bytes": 270,
+   "sha256": "3978d8e0d9bf005920d16359ccf5fbe5bed5b041352087abea0382e60171bc6f",
+   "kind": "data",
+   "from": "data/common/settings/fb2read.ini"
+  },
+  {
+   "path": "SETTINGS/GAMES.INI",
+   "bytes": 1664,
+   "sha256": "05fa78aeeff9a531aa8654965bb7374a440e821f3685b1afd0eb869bda14a798",
+   "kind": "data",
+   "from": "data/common/settings/games.ini"
+  },
+  {
+   "path": "SETTINGS/HA.CFG",
+   "bytes": 81,
+   "sha256": "231ec521e3394251f054e722968afb6b50ad1366961cd894b995212bcc007c6c",
+   "kind": "source",
+   "from": "./../programs/other/ha/SETTINGS/HA.CFG"
+  },
+  {
+   "path": "SETTINGS/ICON.INI",
+   "bytes": 2632,
+   "sha256": "7392047eddba9a76804ffaaae9fdcc32f04ea6c2f370832972f8db7134763b24",
+   "kind": "data",
+   "from": "data/en_US/settings/icon.ini"
+  },
+  {
+   "path": "SETTINGS/KEYMAP.KEY",
+   "bytes": 585,
+   "sha256": "9c1dea821369988ddaaa73865f0468c004c448d02a5df4746aa32bee095faad1",
+   "kind": "built",
+   "from": "programs/system/taskbar/"
+  },
+  {
+   "path": "SETTINGS/LANG.INI",
+   "bytes": 338,
+   "sha256": "5ba2d0bca9734d343c253580eda9918804188279c13238444b2665ed75df44e5",
+   "kind": "data",
+   "from": "data/en_US/settings/lang.ini"
+  },
+  {
+   "path": "SETTINGS/MENU.DAT",
+   "bytes": 4682,
+   "sha256": "5a462bcaf26673583127fcd651bc8ab0da3ce9c51075d9a2f1c98b6bb847ee15",
+   "kind": "data",
+   "from": "data/en_US/settings/menu.dat"
+  },
+  {
+   "path": "SETTINGS/MYKEY.INI",
+   "bytes": 749,
+   "sha256": "c544defcfe3d71626bcdfbec61fcdbae8c2e5b12236cd63963df5060c44d8b05",
+   "kind": "source",
+   "from": "./../programs/system/MyKey/mykey.ini"
+  },
+  {
+   "path": "SETTINGS/NETWORK.INI",
+   "bytes": 737,
+   "sha256": "7534f4dcdb6e03745415209ea7cb8649013b1fb37d9792d79fde7ef8eb697115",
+   "kind": "data",
+   "from": "data/common/settings/network.ini"
+  },
+  {
+   "path": "SETTINGS/SYSPANEL.INI",
+   "bytes": 910,
+   "sha256": "ab9080dbd852d9591b39d8c648fc950f12325b78b215e6482eba93154c0a491e",
+   "kind": "data",
+   "from": "data/common/settings/syspanel.ini"
+  },
+  {
+   "path": "SETTINGS/SYSTEM.ENV",
+   "bytes": 13,
+   "sha256": "0c66c20538b3ab7e266552a9bd5eafd9b79209817b7a19e6cd3be0a5e6449954",
+   "kind": "data",
+   "from": "data/common/settings/system.env"
+  },
+  {
+   "path": "SETTINGS/SYSTEM.INI",
+   "bytes": 973,
+   "sha256": "d2bc2c6441b59f0332cfc74dbc20ab8ddc1dee7e928e609b76545dcc2f23f759",
+   "kind": "data",
+   "from": "data/common/settings/system.ini"
+  },
+  {
+   "path": "SETTINGS/TASKBAR.INI",
+   "bytes": 621,
+   "sha256": "ef1397487a02427b3ad4f770e4073df1ac8f1189fa95d6cfd5adf5ab299d8afa",
+   "kind": "data",
+   "from": "data/common/settings/taskbar.ini"
+  },
+  {
+   "path": "SETTINGS/USBDRV.DAT",
+   "bytes": 114,
+   "sha256": "36e7e15a183accbf6534760ef7bf4286b15ee568494ead71d978142340610475",
+   "kind": "built",
+   "from": "drivers/usb/usbother/"
+  },
+  {
+   "path": "SETUP",
+   "bytes": 1797,
+   "sha256": "83cf1b7e3a3af404d16515a4f1d552620c0eea8cf63e12893f520b751f525d38",
+   "kind": "built",
+   "from": "programs/system/setup/"
+  },
+  {
+   "path": "SINE.MP3",
+   "bytes": 5184,
+   "sha256": "980bce51aece755238cf9ad5f05c66c959d33cf07eec237e6cb4bddeb8726c37",
+   "kind": "data",
+   "from": "data/common/sine.mp3"
+  },
+  {
+   "path": "SKINCFG",
+   "bytes": 3374,
+   "sha256": "e0b3d2b60c23dff7de4931a546f5aaf5c5519e7370b724b76ef074fcada7e746",
+   "kind": "built",
+   "from": "programs/system/skincfg/"
+  },
+  {
+   "path": "STRUCT.INC",
+   "bytes": 8641,
+   "sha256": "f4805129c55664ff8b46b8aa7be640cd617845e9aa79eb7fa434276d1b55f667",
+   "kind": "source",
+   "from": "./../programs/struct.inc"
+  },
+  {
+   "path": "TERMINAL",
+   "bytes": 1813,
+   "sha256": "97e87a69562a281c8f3ec15f770af80932ceae5c1c41c9dd8df9603350218807",
+   "kind": "built",
+   "from": "programs/system/terminal/"
+  },
+  {
+   "path": "TEST",
+   "bytes": 403,
+   "sha256": "4b6e3c08f99d34aea95e36ddf0b5ceb5d4644e5f02aafd00f5dc6ec0ddf0af27",
+   "kind": "built",
+   "from": "programs/testing/protection/"
+  },
+  {
+   "path": "TIMER",
+   "bytes": 478,
+   "sha256": "b2835ae2019e08f332eb5670103af177d24b5ecb9aa7a3c667655a8bf80cf383",
+   "kind": "built",
+   "from": "programs/other/Timer/"
+  },
+  {
+   "path": "TINFO",
+   "bytes": 1255,
+   "sha256": "6b42d2d20c7dd491f534be08cbca79e01129e9a7fbf087821b366b2210a9f171",
+   "kind": "built",
+   "from": "programs/system/tinfo/"
+  },
+  {
+   "path": "TINYPAD",
+   "bytes": 14839,
+   "sha256": "cc5536023d1ad99bb9bb9d410cd71dcb040762b9668a4607b2c172890386bf3f",
+   "kind": "built",
+   "from": "programs/develop/tinypad/"
+  },
+  {
+   "path": "UNZ",
+   "bytes": 3685,
+   "sha256": "5c517dee9f7aff483b744251f2d8c7e4d48aa21ba74805b9c688bea7e1ab6916",
+   "kind": "built",
+   "from": "programs/fs/unz/"
+  },
+  {
+   "path": "WELCOME.HTM",
+   "bytes": 3016,
+   "sha256": "49ddee3d0f38f6d8c094e1f6a8c6dd5cf80de5829687719d7ffcfe7d901f830c",
+   "kind": "built",
+   "from": "data/en_US/"
+  },
+  {
+   "path": "ZKEY",
+   "bytes": 1675,
+   "sha256": "ab97713029ac68a64cdce773dd29af169631d0d3c4a7afc0b36925c537e4ba8b",
+   "kind": "built",
+   "from": "programs/system/zkey/"
+  }
+ ]
+}
