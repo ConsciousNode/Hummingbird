@@ -18,6 +18,7 @@ floppy image to its full desktop, runs its apps, and shuts down through APM. It 
 | `snapshots/` | the seven boot milestones from `headless.js`, plus the `os-suite.js` screens, text dumps and kernel logs | |
 | `ARCHITECTURE.md`, `HARDWARE.md`, `REPORT.md` | Argon's design notes, hardware list and report | |
 | [`AUDIT.md`](AUDIT.md) | Kehai's audit: what reproduces, what was fixed, what's still a shortcut | |
+| [`NOTES-1.2.md`](NOTES-1.2.md) | working notes toward 1.2: the MS-DOS 4.0 smoke test, small fixes, IDE → sound → CD → ReactOS, our own DOS floppy | |
 
 ```sh
 node tests/cpu-oracle.js    # 140/140 instruction forms match real hardware
