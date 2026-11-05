@@ -23,7 +23,7 @@ This document specifies exactly what hardware, CPU features, I/O ports, and BIOS
 | Vector | Functions Implemented | Behavior |
 | :--- | :--- | :--- |
 | **`INT 08h`** | System Timer ISR (`F000:E040`) | Increments 32-bit BDA tick counter at `0040:006C`, invokes `INT 1Ch`, and sends EOI (`0x20`) to Master PIC |
-| **`INT 09h`** | Keyboard ISR (`F000:E048`) | Reads scancode from port `0x60` and sends EOI to Master PIC |
+| **`INT 09h`** | Keyboard ISR (`F000:E048`) | Reads the scancode from port `0x60`, translates set-1 scancodes (Shift/Ctrl/Alt/Caps state in BDA `0040:0017`) into BIOS key words in the BDA buffer, and sends EOI. `INT 16h` first services keyboard bytes waiting in the 8042, as a BIOS running with interrupts enabled would |
 | **`INT 10h`** | VGA & VBE 3.0 Video BIOS | `AH=00h` (set mode), `01h` (cursor shape), `02h` (set cursor pos), `03h` (get cursor pos), `06h/07h` (scroll up/down), `08h/09h/0Ah` (read/write char/attr), `0Eh` (teletype output), `0Fh` (get video mode), `11h` (font info), `12h` (EGA info), `13h` (write string), `4F00h` (VBE controller info `"VESA"` v3.0), `4F01h` (VBE mode info with LFB at `0xE0000000`), `4F02h` (set VBE mode), `4F03h` (get VBE mode), `4F05h/06h/07h` (window/scanline/display start) |
 | **`INT 11h` / `12h`** | Equipment Word / Base Memory Size | Returns BDA `0x0410` (`0x0023`) and `0x0413` (`639` KB) |
 | **`INT 13h`** | Floppy Disk Services (Drive `0x00`) | `AH=00h` (reset), `01h` (status), `02h` (read CHS sectors from 1.44 MB floppy image `80×2×18` with multi-track wrap), `03h` (write CHS sectors to in-memory floppy image), `08h` (get drive parameters: `BL=04h`, `CH=79`, `CL=18`, `DH=1`, `ES:DI=F000:EFC7`), `15h` (get disk type). Hard drives (`DL >= 0x80`) return `CF=1` |

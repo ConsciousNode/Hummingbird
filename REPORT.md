@@ -1,3 +1,9 @@
+> **Audited 2026-11-04. See [AUDIT.md](AUDIT.md).** This report is Argon's, as delivered, and its milestones,
+> determinism and zero-`#UD` claims reproduce. Corrections: speeds depend on the machine (here: Node ~31 MIPS;
+> Chromium peak 33.6, Firefox 12.4 MIPS). The BIOS keyboard (`INT 09h`), AAA/AAS and the headless mouse helper had
+> bugs, now fixed. The PIT runs a fixed mode-based schedule rather than the programmed rate, which is a bigger
+> shortcut than §4.2.3 suggests.
+
 # Hummingbird Verification & Benchmark Report (`REPORT.md`)
 
 ## 1. Executive Summary & Milestones Reached

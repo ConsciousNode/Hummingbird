@@ -43,9 +43,30 @@ archive next to it.
 | `FONTS/TAHOMA.KF` | font with no licence or provenance in the tree, and no program references it. (Every other font has a licence file in the tree.) |
 | `KUZKINA.MID` | MIDI file with no licence or provenance in the tree, and no program references it |
 
-Everything else boots and behaves as in the official nightly:
-`reference/` has QEMU screenshots of the boot menu and the desktop for our
-image and for the official 0.7.7.0+8930 nightly.
+It boots to the same desktop as the official nightly: `reference/` has QEMU
+screenshots of the boot menu and desktop for both. **But it is not
+feature-complete; see the next section.**
+
+## What's missing: programs that need other compilers
+
+*(Correction, 2026-11-04: an earlier version of this README said everything
+else "behaves as in the official nightly". It doesn't.)*
+
+This build turns on only the FASM and NASM toolchains. KolibriOS also builds
+programs with **C--, TCC, GCC, MSVC and Oberon-07**, and those groups were
+switched off (`patches/tup.config`), so their programs aren't on the floppy.
+Their desktop icons are still there and do nothing. Compared with the official
+nightly, these 58 files are absent (a few are renames in the newer source tree,
+such as `ICONS16.PNG` → `ICONS18.PNG`):
+
+`APP_PLUS`, `BARSCFG`, `DEVELOP/CEDIT`, `DEVELOP/CLIPVIEW`, `DEVELOP/DIFF`, `DEVELOP/EXAMPLES/CIRCLE`, `DEVELOP/EXAMPLES/COLORREF`, `DEVELOP/EXAMPLES/CONGET`, `DEVELOP/EXAMPLES/CSLIDE`, `DEVELOP/EXAMPLES/TESTCON2`, `DEVELOP/EXAMPLES/THREAD`, `DEVELOP/MENU`, `EASYSHOT`, `FB2READ`, `FSPEED`, `File Managers/EOLITE`, `File Managers/ICONS.INI`, `File Managers/KFM2`, `GAMES/CLICKS`, `GAMES/DINO`, `GAMES/FLOOD-IT`, `GAMES/FLPYBIRD`, `GAMES/KOSILKA`, `GAMES/MBLOCKS`, `GAMES/MINE`, `GAMES/NUMBERS`, `GAMES/REVERSI`, `GAMES/RFORCES`, `GAMES/XONIX`, `GRAPH`, `ICONS16.PNG`, `LIB/BASE64.OBJ`, `LIB/ICONV.OBJ`, `LIB/INPUTBOX.OBJ`, `LIB/LIBC.OBJ`, `MEDIA/ICONEDIT`, `MEDIA/IMGF/CEDG.OBJ`, `MEDIA/IMGF/DITHER.OBJ`, `MEDIA/IMGF/IMGF`, `MEDIA/IMGF/INVSOL.OBJ`, `MEDIA/PIXIE`, `MEDIA/PIXIESKN.PNG`, `MGB`, `MOUSECFG`, `NETWORK/DL`, `NETWORK/DOWNLOADER`, `NETWORK/NSINST`, `NETWORK/WEBVIEW`, `NETWORK/WHOIS`, `RUN`, `SEARCH`, `SETTINGS/KOLIBRI.LBL`, `SHELL`, `SYSMON`, `SYSPANEL`, `TABLE`, `TMPDISK`, `UNIMG`
+
+The ones people will notice: **SHELL**, both file managers (**EOLITE**,
+**KFM2**), **WEBVIEW**, **SYSPANEL**, **CEDIT**, and games like **XONIX**,
+**MINE**, **FLOOD-IT** and **REVERSI**. Getting them back means building those
+toolchains from source too (TCC and GCC first; C-- and Oberon-07 need a look at
+their own sources and licences), with the same blob-free, reproducible rules.
+That's the next step for this floppy.
 
 ## The source (GPL)
 

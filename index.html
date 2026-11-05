@@ -723,6 +723,9 @@ const VGA_TEXT_PALETTE = new Uint32Array([
 ]);
 
 // Build CP437 8x16 VGA font (256 chars * 16 bytes = 4096 bytes)
+// Provenance [Kehai audit]: glyphs drawn after the IBM PC VGA ROM 8x16 font (code page 437). 47 of the 140
+// glyphs defined here are bit-identical to that font as distributed in Linux lib/fonts/font_8x16.c; the rest differ.
+// Typeface/bitmap glyph designs are not copyrightable in the US (37 CFR 202.1(e)); noted for transparency.
 function createVgaFont8x16() {
   const font = new Uint8Array(4096);
   const setGlyph = (code, rows) => {
@@ -2098,6 +2101,19 @@ class CMOSRTC {
   }
 }
 
+// [Kehai audit] Set-1 scancode -> ASCII for the BIOS keyboard handler (INT 09h).
+function hbScTable(r1, r2, r3, r4) {
+  const t = new Array(0x3A).fill('');
+  t[0x01] = '\x1b'; t[0x0E] = '\b'; t[0x0F] = '\t'; t[0x1C] = '\r'; t[0x37] = '*'; t[0x39] = ' ';
+  [...r1].forEach((c, i) => { t[0x02 + i] = c; });
+  [...r2].forEach((c, i) => { t[0x10 + i] = c; });
+  [...r3].forEach((c, i) => { t[0x1E + i] = c; });
+  [...r4].forEach((c, i) => { t[0x2B + i] = c; });
+  return t;
+}
+const HB_SC_PLAIN = hbScTable('1234567890-=', 'qwertyuiop[]', "asdfghjkl;'`", '\\zxcvbnm,./');
+const HB_SC_SHIFT = hbScTable('!@#$%^&*()_+', 'QWERTYUIOP{}', 'ASDFGHJKL:"~', '|ZXCVBNM<>?');
+
 class PS2Controller8042 {
   constructor(pc) {
     this.pc = pc;
@@ -2376,12 +2392,9 @@ class PS2Controller8042 {
 
   // Send a keyboard scancode (Set 1) and also push to BDA if in real mode
   sendKeyScancode(scancode, ascii = 0) {
-    if (!this.pc.cpu.isProtectedMode()) {
-      // Also push directly to BDA keyboard buffer if it's a make code
-      if ((scancode & 0x80) === 0 && (scancode !== 0xE0)) {
-        this.pc.biosPushKey((scancode << 8) | (ascii & 0xFF));
-      }
-    }
+    // [Kehai audit] v1.0 also pushed make codes straight into the BIOS buffer here, but only when the CPU
+    // happened to be in real mode, and the INT 09h handler discarded the byte. Keys now reach the BIOS
+    // buffer the way they do on a PC: IRQ1 -> INT 09h -> biosKeyboardByte(). (ascii is no longer needed.)
     this.enqueue(scancode & 0xFF, false, false);
   }
 
@@ -3150,6 +3163,44 @@ class HummingbirdPC {
     this.cpu.eflags = 0x00000202;    // IF = 1
   }
 
+  // [Kehai audit] BIOS keyboard translation: set-1 scancode -> (scan << 8 | ascii) in the BDA buffer,
+  // with Shift/Ctrl/Alt/Caps Lock state kept in the BDA shift-flags byte at 0040:0017.
+  biosKeyboardByte(sc) {
+    if (sc === 0xE0) { this.kbdE0 = true; return; }
+    const ext = !!this.kbdE0; this.kbdE0 = false;
+    const brk = sc & 0x80, code = sc & 0x7F;
+    let fl = this.ram[0x0417];
+    if (code === 0x2A && !ext) fl = brk ? fl & ~0x02 : fl | 0x02;
+    else if (code === 0x36 && !ext) fl = brk ? fl & ~0x01 : fl | 0x01;
+    else if (code === 0x1D) fl = brk ? fl & ~0x04 : fl | 0x04;
+    else if (code === 0x38) fl = brk ? fl & ~0x08 : fl | 0x08;
+    else if (code === 0x3A) { if (!brk) fl ^= 0x40; }
+    else if (!brk) {
+      let ascii = 0;
+      if (ext) ascii = code === 0x1C ? 13 : (code === 0x35 ? 47 : 0);   // keypad Enter, keypad '/'
+      else if (!(fl & 0x08)) {
+        let ch = ((fl & 0x03) ? HB_SC_SHIFT : HB_SC_PLAIN)[code] || '';
+        if (ch && /[a-z]/i.test(ch) && (fl & 0x40)) ch = (fl & 0x03) ? ch.toLowerCase() : ch.toUpperCase();
+        ascii = ch ? ch.charCodeAt(0) : 0;
+        if (ascii && (fl & 0x04)) ascii = /[a-z]/i.test(ch) ? ch.toLowerCase().charCodeAt(0) - 96 : 0;
+      }
+      this.biosPushKey((code << 8) | ascii);
+    }
+    this.ram[0x0417] = fl;
+  }
+
+  // Service keyboard bytes waiting in the 8042, as IRQ1 would while a real BIOS sits in INT 16h with IF=1.
+  biosDrainKeyboard() {
+    for (let guard = 0; guard < 64; guard++) {
+      if (!this.ps2.hasOut) {
+        if (this.ps2.queue.length && !this.ps2.queue[0].isMouse) this.ps2.refillOutput(false);
+        else break;
+      }
+      if (!this.ps2.hasOut || this.ps2.outIsMouse) break;
+      this.biosKeyboardByte(this.ps2.readData() & 0xFF);
+    }
+  }
+
   biosPushKey(keyWord) {
     const head = this.ramView.getUint16(0x041A, true);
     const tail = this.ramView.getUint16(0x041C, true);
@@ -3227,7 +3278,7 @@ class HummingbirdPC {
 
       case 0x09: { // IRQ1 Keyboard ISR
         if (this.ps2.hasOut && !this.ps2.outIsMouse) {
-          this.ps2.readData();
+          this.biosKeyboardByte(this.ps2.readData() & 0xFF);
         }
         this.pic.master.writeCommand(0x20); // EOI
         return;
@@ -3753,6 +3804,7 @@ class HummingbirdPC {
 
   handleBiosInt16(ah, al) {
     const cpu = this.cpu;
+    this.biosDrainKeyboard();
     switch (ah) {
       case 0x00:
       case 0x10: { // Wait for keystroke and read
@@ -3943,8 +3995,9 @@ class HummingbirdPC {
           }
           if (iconPixels > 40) {
             // Record initial mouse position (MOUSE_X at phys 0x4C82A, MOUSE_Y at phys 0x4C82C)
-            const mx = this.ramView.getUint16(0x4C82A, true);
-            const my = this.ramView.getUint16(0x4C82C, true);
+            const ma = this._mouseAddr !== undefined ? this._mouseAddr : 0x4C82A;
+            const mx = this.ramView.getUint16(ma, true);
+            const my = this.ramView.getUint16(ma + 2, true);
             this.initialMousePos = { x: mx, y: my };
             this.recordMilestone('desktop_drawn', '4. Desktop draws', `1024x768x32 desktop with wallpaper, icons, taskbar & cursor (${names.length} tasks)`);
           }
@@ -3954,8 +4007,9 @@ class HummingbirdPC {
 
     // Check Milestone 5 (Mouse moves the pointer)
     if (this.milestoneMap.has('desktop_drawn') && !this.milestoneMap.has('mouse_moved') && this.initialMousePos) {
-      const mx = this.ramView.getUint16(0x4C82A, true);
-      const my = this.ramView.getUint16(0x4C82C, true);
+      const ma = this._mouseAddr !== undefined ? this._mouseAddr : 0x4C82A;
+      const mx = this.ramView.getUint16(ma, true);
+      const my = this.ramView.getUint16(ma + 2, true);
       if (mx !== this.initialMousePos.x || my !== this.initialMousePos.y) {
         this.recordMilestone('mouse_moved', '5. Mouse moves pointer', `Pointer moved from (${this.initialMousePos.x},${this.initialMousePos.y}) to (${mx},${my})`);
       }
@@ -4337,10 +4391,35 @@ class HummingbirdPC {
     this.cpu.runSteps(120000);
   }
 
+  // [Kehai audit] The headless mouse helper steers by reading KolibriOS's pointer variable. v1.0 hard-coded its
+  // address (0x4C82A) from the official nightly's kernel; other kernel builds keep it elsewhere, so the helper
+  // steered blind. Find it instead: the pointer starts at screen centre, so look for (w/2, h/2), nudge, keep the
+  // candidate that moved. Falls back to 0x4C82A. Used only by the headless helpers and milestone checks.
+  findKolibriMouseVars() {
+    const cx = (this.vga.width / 2) | 0, cy = (this.vga.height / 2) | 0, v = this.ramView;
+    const limit = Math.min(this.ram.length - 4, 0x01000000);
+    let cand = [];
+    for (let a = 0; a < limit; a += 2) if (v.getUint16(a, true) === cx && v.getUint16(a + 2, true) === cy) cand.push(a);
+    if (!cand.length) return 0x4C82A;
+    this.ps2.sendMousePacket(6, 0, 0); this.drainPS2(); this.cpu.runSteps(600000);
+    cand = cand.filter(a => v.getUint16(a, true) > cx && v.getUint16(a + 2, true) === cy);
+    this.ps2.sendMousePacket(0, 6, 0); this.drainPS2(); this.cpu.runSteps(600000);
+    cand = cand.filter(a => v.getUint16(a + 2, true) > cy);
+    if (!cand.length) return 0x4C82A;
+    if (this.initialMousePos) this.initialMousePos = { x: cx, y: cy }; // milestone 5 compares at the address found
+    return cand[0];
+  }
+
+  get kolibriMouseAddr() {
+    if (this._mouseAddr === undefined) this._mouseAddr = this.findKolibriMouseVars();
+    return this._mouseAddr;
+  }
+
   moveMouseTo(tx, ty) {
+    const ma = this.kolibriMouseAddr;
     for (let iter = 0; iter < 150; iter++) {
-      const mx = this.ramView.getUint16(0x4C82A, true);
-      const my = this.ramView.getUint16(0x4C82C, true);
+      const mx = this.ramView.getUint16(ma, true);
+      const my = this.ramView.getUint16(ma + 2, true);
       const dx = tx - mx;
       const dy = ty - my;
       if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) break;
@@ -7057,9 +7136,8 @@ class X86CPU {
         let ax = this.regs[REG_EAX] & 0xFFFF;
         let cf = 0;
         if ((ax & 0x0F) > 9 || (this.eflags & FL_AF)) {
-          const al = ((ax & 0xFF) + 6) & 0x0F;
-          const ah = (((ax >>> 8) & 0xFF) + 1) & 0xFF;
-          ax = (ah << 8) | al;
+          // 80286+ (incl. Pentium): AX += 0x106, so AL's carry ripples into AH [Kehai audit: was 8086 AL+6/AH+1]
+          ax = ((ax + 0x106) & 0xFF0F);
           cf = FL_CF | FL_AF;
         } else {
           ax &= 0xFF0F;
@@ -7073,9 +7151,8 @@ class X86CPU {
         let ax = this.regs[REG_EAX] & 0xFFFF;
         let cf = 0;
         if ((ax & 0x0F) > 9 || (this.eflags & FL_AF)) {
-          const al = ((ax & 0xFF) - 6) & 0x0F;
-          const ah = (((ax >>> 8) & 0xFF) - 1) & 0xFF;
-          ax = (ah << 8) | al;
+          // 80286+ (incl. Pentium): AX -= 0x106, borrow ripples into AH [Kehai audit: was 8086 AL-6/AH-1]
+          ax = ((ax - 0x106) & 0xFF0F);
           cf = FL_CF | FL_AF;
         } else {
           ax &= 0xFF0F;

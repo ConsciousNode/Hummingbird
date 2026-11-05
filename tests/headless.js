@@ -7,7 +7,8 @@
 // PNG encoder.
 //
 // Usage:
-//   node tests/headless.js [path/to/kolibri.img] [--snap-at=250000,290000000]
+//   node tests/headless.js [path/to/kolibri.img] [--snap-at=250000,290000000] [--out=dir]
+// Default image: kolibrios/kolibri-hummingbird.img (the studio's blob-free build).
 // ============================================================================
 
 const fs = require('fs');
@@ -188,9 +189,9 @@ function loadCoreFromHtml(htmlPath) {
 function resolveImagePath(argPath) {
   const candidates = [
     argPath,
+    path.join(__dirname, '..', 'kolibrios', 'kolibri-hummingbird.img'),
     'kolibri-0.7.7.0+8930.img',
-    'kolibri.img',
-    path.join(__dirname, '..', 'user_uploaded_files', 'ttl=63d', 'user_uploaded', 'kolibri-0.7.7.0+8930.img')
+    'kolibri.img'
   ].filter(Boolean);
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
@@ -215,9 +216,8 @@ function main() {
   const rootDir = path.resolve(__dirname, '..');
   const htmlPath = path.join(rootDir, 'index.html');
   const imgPath = resolveImagePath(imgArg);
-  const outDir = path.join(rootDir, 'artifacts', 'file_generation', 'ttl=63d', 'output');
-  const snapDir = path.join(rootDir, 'snapshots');
-  fs.mkdirSync(outDir, { recursive: true });
+  const outArg = args.find(a => a.startsWith('--out='));
+  const snapDir = outArg ? path.resolve(outArg.slice(6)) : path.join(rootDir, 'snapshots');
   fs.mkdirSync(snapDir, { recursive: true });
 
   console.log(`=== Hummingbird Headless Runner ===`);
@@ -231,10 +231,7 @@ function main() {
   function saveSnapshot(pc, fileName, label) {
     const { width, height, rgba } = pc.vga.renderFrame();
     const pngBytes = encodePNGFromScratch(width, height, rgba);
-    const p1 = path.join(snapDir, fileName);
-    const p2 = path.join(outDir, fileName);
-    fs.writeFileSync(p1, pngBytes);
-    fs.writeFileSync(p2, pngBytes);
+    fs.writeFileSync(path.join(snapDir, fileName), pngBytes);
     savedSnapshots.push({ fileName, width, height, inst: pc.cpu.totalInstructions, label });
     console.log(`  [SNAPSHOT] ${fileName} (${width}x${height}, ${pngBytes.length} bytes) @ inst=${pc.cpu.totalInstructions} — ${label}`);
   }

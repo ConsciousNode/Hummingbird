@@ -19,9 +19,9 @@ const { loadCoreFromHtml } = require('./headless.js');
 function resolveImagePath(argPath) {
   const candidates = [
     argPath,
+    path.join(__dirname, '..', 'kolibrios', 'kolibri-hummingbird.img'),
     'kolibri-0.7.7.0+8930.img',
-    'kolibri.img',
-    path.join(__dirname, '..', 'user_uploaded_files', 'ttl=63d', 'user_uploaded', 'kolibri-0.7.7.0+8930.img')
+    'kolibri.img'
   ].filter(Boolean);
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
