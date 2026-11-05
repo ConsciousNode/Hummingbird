@@ -1,60 +1,60 @@
-# Hummingbird Architecture (`ARCHITECTURE.md`)
+# Hummingbird 1.1 Architecture (`ARCHITECTURE.md`)
 
-**Hummingbird** is a single-file, zero-dependency x86 PC emulator (`index.html`) written from scratch in vanilla JavaScript under the MIT License. Its exact same core (`<script id="hummingbird-core">`) executes both inside a browser tab and headlessly in Node.js (`tests/headless.js`, `tests/cpu.js`, `tests/determinism.js`).
+**Hummingbird 1.1** is a single-file, zero-dependency x86 PC emulator (`index.html`) written from scratch in vanilla JavaScript under the MIT License. Its exact same core (`<script id="hummingbird-core">`) executes both inside a browser tab and headlessly in Node.js (`tests/os-suite.js`, `tests/bench.js`, `tests/headless.js`, `tests/cpu.js`, `tests/cpu-oracle.js`, `tests/determinism.js`).
 
 ## 1. System Topology
 
-Hummingbird is organized into five cohesive subsystems inside `index.html`:
+Hummingbird 1.1 is organized into five cohesive subsystems inside `index.html`:
 
 | Subsystem | Class / Module | Role |
 | :--- | :--- | :--- |
 | **Constants & Font** | `createVgaFont8x16`, `PARITY_TABLE` | x86 architectural flags (`EFLAGS`, `CR0`, `CR4`), 256-entry parity lookup table, 16-color CGA/VGA text palette, and built-in 256-glyph CP437 8×16 bitmap font |
 | **x87 Floating-Point Unit** | `X87FPU` | 8-register circular stack (`ST(0)..ST(7)`), IEEE-754 80-bit extended-precision (`tbyte`) reader/writer with lossless raw 10-byte preservation across `fnsave`/`frstor`, transcendental and arithmetic ops (`D8..DF`) |
-| **PC Platform, Chipset & High-Level BIOS** | `HummingbirdPC`, `PIC8259Dual`, `PIT8254`, `CMOSRTC`, `PS2Controller8042`, `PCIBus`, `VGADisplay` | Physical address routing (RAM, A20 gate, VGA window `0xA0000..0xBFFFF`, BIOS ROM `0xE0000..0xFFFFF`, VBE LFB at `0xE0000000`), I/O port bus, hardware devices, and high-level BIOS interrupt handlers |
-| **i586 CPU Core, MMU & Block Cache** | `X86CPU` | Real mode, 16/32-bit Protected Mode, Virtual-8086 mode, GDT/LDT/IDT/TSS segmentation, 2-level paging (4 KB + 4 MB PSE) with 4-array TLB and dirty-list flush, fault-restartable exceptions, and 64-byte cache-line-invalidated Basic-Block Cache |
-| **Browser UI & Debugger** | DOM controller | Canvas renderer, Pointer-Lock PS/2 mouse bridge, DOM `KeyboardEvent.code` to AT Set 1 scancode translator, live register/flag/task debugger, Port `0xE9` + Kernel Debug Console, and standalone Cartridge exporter |
+| **PC Platform, Chipset & High-Level BIOS** | `HummingbirdPC`, `PIC8259Dual`, `PIT8254`, `CMOSRTC`, `PS2Controller8042`, `DMA8237`, `FDC82077AA`, `PCIBus`, `VGADisplay` | Unified virtual clock (`cpu.cycles` at configurable `cpuFreqHz`, default `100 MHz`), physical address routing (RAM, A20 gate, VGA window `0xA0000..0xBFFFF`, BIOS ROM `0xE0000..0xFFFFF`, VBE LFB at `0xE0000000`), I/O port bus, hardware devices, and high-level BIOS interrupt handlers |
+| **i586 CPU Core, MMU & Block Cache** | `X86CPU` | Real mode, 16/32-bit Protected Mode, Virtual-8086 mode, GDT/LDT/IDT/TSS segmentation, 2-level paging (4 KB + 4 MB PSE) with 4-array TLB and dirty-list flush, fault-restartable exceptions, `HLT` deadline skip-ahead, and 64-byte cache-line-invalidated Basic-Block Cache |
+| **Browser UI, WebAudio & Debugger** | DOM controller, `PCSpeakerAudio` | Canvas renderer, Deterministic vs. Real-Time scheduler, WebAudio PC Speaker synthesizer (`PIT` Ch2 + port `0x61`), Pointer-Lock PS/2 mouse bridge, DOM `KeyboardEvent.code` to AT Set 1 scancode translator, live register/flag/task debugger, Port `0xE9` + dynamic Kernel Debug Console, and standalone Cartridge exporter |
 
-## 2. i586 CPU Core (`X86CPU`)
+## 2. Unified Virtual Clock & Timing Architecture (New in 1.1)
 
-### 2.1 Execution Modes & Segmentation
-`X86CPU` implements the complete x86 operating mode state machine:
-- **Real Mode (`CR0.PE = 0`)**: 16-bit default operand/address size (overridable to 32-bit via `0x66`/`0x67` prefixes; supports Unreal Mode descriptor limits when returning from protected mode). Segment loads set `base = selector << 4`.
-- **Protected Mode (`CR0.PE = 1, EFLAGS.VM = 0`)**: 16-bit and 32-bit code/stack segments (`D/B` bit in descriptor flags), GDT (`GDTR`) and LDT (`LDTR`) descriptor lookups, CPL (`CS & 3`), DPL/RPL privilege checks, conforming/non-conforming code segments, and 32-bit Task State Segment (`TSS`, `TR`) stack switching (`ESP0`/`SS0`) on Ring 3 to Ring 0 interrupts and exceptions.
-- **Virtual-8086 Mode (`CR0.PE = 1, EFLAGS.VM = 1`)**: Real-mode segment base semantics under protected-mode paging with `CPL = 3`, `IOPL`-sensitive instructions (`CLI`, `STI`, `PUSHF`, `POPF`, `INT n`, `IRET`), and full segment-register (`ES`, `DS`, `FS`, `GS`) stack frame save/restore on interrupt entry and `IRETD`.
+### 2.1 Virtual Cycle Clock (`cpu.cycles`) vs. Instruction Count (`cpu.totalInstructions`)
+Hummingbird 1.1 separates retired instructions (`cpu.totalInstructions`) from virtual time (`cpu.cycles`):
+- Every retired instruction in both the single-step interpreter and `execBasicBlock` advances `cpu.totalInstructions += 1` and `cpu.cycles += 1` (at a configurable virtual CPU frequency `pc.cpuFreqHz`, defaulting to `100,000,000` Hz / `100 MHz`).
+- All timed hardware devices derive their state strictly from `cpu.cycles`:
+  - **`PIT8254` (`1.193182 MHz`)**: Converts virtual cycles to PIT oscillator ticks via `Math.floor(cycles * 1193182 / cpuFreqHz)`. Channels 0 and 2 count their OS-programmed 16-bit reload values (`reload === 0 ? 65536 : reload`) across Modes `0..5` (including BCD, counter latch, read-back command `0xC0..0xDF`, and lobyte/hibyte access). Channel 0's output drives `IRQ0` (`INT 08h` in real mode, or the OS-remapped vector in protected mode). Channel 2's gate (`port 0x61 bit 0`) and output (`port 0x61 bit 5`) drive PC speaker tone generation and calibration loops. Port `0x61 bit 4` (DRAM refresh detect) toggles every `18` PIT ticks (`15.085 µs`).
+  - **`RDTSC`**: Returns the 64-bit virtual cycle counter `cpu.cycles` in `EDX:EAX`.
+  - **`CMOSRTC`**: Advances its calendar clock by `Math.floor(cycles / cpuFreqHz)` seconds from the base epoch (`2025-09-29T23:24:00Z` in Deterministic mode, or `Date.now()` in Real-time mode) and sets Update-Ended Status (`Reg C bit 4`) on each second boundary.
+  - **VGA Vertical Retrace (`0x3DA` / `0x3BA`)**: Derives a 60 Hz frame period (`1,666,667` cycles at 100 MHz) with a `700 µs` (`70,000`-cycle) vertical retrace pulse (`bit 3` + `bit 0`) and scanline horizontal retrace (`bit 0`).
 
-### 2.2 Paging & 4-Way Permission TLB
-When `CR0.PG = 1`, linear addresses pass through a 2-level page table walk (`CR3` Page Directory -> Page Table -> 4 KB page, or 4 MB Large Page when `CR4.PSE = 1` and `PDE.PS = 1`):
-- **Permission Enforcement**: Evaluates combined `U/S` (User/Supervisor) and `R/W` (Read/Write) bits across PDE and PTE, including `CR0.WP` (Write Protect in Ring 0). On violation or non-present page (`P = 0`), sets `CR2` to the exact faulting linear address and raises `#PF` (Vector 14) with the architectural error code (`bit 0 = P`, `bit 1 = W/R`, `bit 2 = U/S`).
-- **Accessed & Dirty Bits**: Automatically sets `A` (`0x20`) on PDE/PTE reads and `D` (`0x40`) on writes in physical RAM.
-- **4-Array Smi-Tagged TLB**: Maintains four 1M-entry `Uint32Array` tables (`tlbReadSys`, `tlbWriteSys`, `tlbReadUser`, `tlbWriteUser`) indexed by virtual page (`linAddr >>> 12`). Entries encode the physical page frame in bits `31..12` plus fast-path classification flags in bits `2..0`:
-  - `bit 0 (1)`: Valid translation
-  - `bit 1 (2)`: Direct physical RAM page (`physPage < ramSize`, outside read-only BIOS ROM `0xE0000..0xFFFFF`, with A20 enabled)
-  - `bit 2 (4)`: Direct VBE Linear Framebuffer page (`0xE0000000..0xE0FFFFFF`), allowing `readMem32`/`writeMem32` to index `vbeLfb32[(entry & 0x00FFF000 | offset) >>> 2]` using 31-bit V8 Small Integers (`Smi`) without allocating 64-bit heap numbers for addresses `>= 0x80000000`.
-- **O(1) Dirty-List TLB Flush**: Context switches in KolibriOS (`do_change_task`) reload `CR3` thousands of times per second. Rather than zeroing 16 MB of TLB arrays on every `mov cr3, eax`, `X86CPU` records populated virtual page indices in `tlbDirtyList` (`Uint32Array(65536)`) and `tlbDirtyMask`, clearing only the ~20–150 pages touched during the quantum.
+### 2.2 `HLT` Deadline Skip-Ahead (`getNextDeadlineCycle`)
+When the guest OS executes `HLT` (`0xF4`) with interrupts enabled (`EFLAGS.IF = 1`) and no unmasked PIC interrupt or queued 8042 scancode/mouse byte is immediately ready:
+1. `HummingbirdPC.getNextDeadlineCycle(cpu.cycles)` queries `PIT8254.getNextIrq0Cycle(cpu.cycles)` for the exact virtual cycle at which PIT Channel 0 will next reach terminal count / reload boundary.
+2. Instead of spinning through millions of idle `HLT` steps, `X86CPU.stepInstruction()` jumps `cpu.cycles` directly to `nextDeadlineCycle` in a single step while incrementing `cpu.totalInstructions` by `1`.
+3. This makes real-mode BIOS wait loops (`INT 16h AH=00h/10h` waiting on `INT 08h` during KolibriOS's 2-second boot menu or GRUB's countdown) and protected-mode `HLT` idle loops (`osloop` / `IDLE` thread) both fast and 100% deterministic.
 
-### 2.3 Fault-Restartable Exceptions
-Every instruction records `startEIP = eip` and `startESP = regs[ESP]` prior to decoding. Cross-page 16-bit and 32-bit writes (`(linAddr & 0xFFF) > 0xFFC`) translate both pages before writing any byte. When an exception (`#DE`, `#UD`, `#NM`, `#TS`, `#NP`, `#SS`, `#GP`, `#PF`) occurs, `raiseException` restores `eip = startEIP` and `esp = startESP` (unless inside a `REP` string loop, which preserves partial progress in `ECX`/`ESI`/`EDI`), pushes the trap frame onto the target ring stack, and throws `CPU_FAULT_SIGNAL` to unwind cleanly to the top-level loop.
+### 2.3 Deterministic Mode vs. Real-Time Mode
+- **Deterministic Mode (`pc.deterministic = true`)**: Virtual time advances purely by instruction execution and `HLT` deadline skip-ahead. Two runs of the same image produce bit-identical framebuffers, cycle counts, and CPU states at every instruction count, and `useBlockCache = true` vs. `useBlockCache = false` remain 100% bit-identical.
+- **Real-Time Mode (`pc.deterministic = false`)**: The browser frame loop (`requestAnimationFrame`) computes a wall-clock cycle budget `Math.floor((dtMs / 1000) * pc.cpuFreqHz)` per frame and caps execution to that budget, so a 2-second boot menu takes 2 wall-clock seconds and a 30-second GRUB countdown takes 30 wall-clock seconds.
 
-### 2.4 Basic-Block Cache (Decode Once, Run Many Times)
-To accelerate tight inner loops (such as KolibriOS's LZMA kernel/icon unpackers and `Vesa20_drawbackground_tiled`), `X86CPU` includes a direct-mapped 65,536-entry Basic-Block Cache (`blockCache`) active in 32-bit flat mode:
-- **Decoding**: Decodes sequences of up to 16 instructions (ALU, `MOV`, `MOVZX`, `LEA`, `TEST`, `INC`/`DEC`, `PUSH`/`POP`, `SHIFT`, `IMUL`, `XCHG`, 16-bit `0x66` `MOV`/`ALU`, and block terminators `Jcc`, `JMP`, `CALL`, `RET`) into pre-decoded micro-ops with flat integer fields (`type, mod, reg, rm, base, index, scale, disp, imm, aluOp`).
-- **64-Byte Cache-Line Self-Modifying Code Invalidation**: Physical RAM is partitioned into 64-byte cache lines (`physAddr >>> 6`, tracked in `pageWriteVersion`). Any write to physical RAM increments the corresponding 64-byte line version. Each cached block stores the versions of its start and end 64-byte lines (`ver`, `ver1`) and checks them before and during execution, ensuring immediate invalidation on self-modifying code while preventing false invalidation when data variables share a 4 KB page with code (as in `KERNEL.MNT`'s unpacker at `0x280000`).
-- **Bit-Exact Equivalence**: Every micro-op in `execBasicBlock` updates `startEIP`, `startESP`, `eip`, `totalInstructions`, and `pit.instAccum` identically to single-instruction stepping.
+## 3. i586 CPU Core (`X86CPU`)
 
-## 3. High-Level BIOS & PC Devices (`HummingbirdPC`)
+### 3.1 Execution Modes, 286+ BCD Semantics & Segmentation
+- **Real Mode, 16/32-bit Protected Mode & Virtual-8086 Mode**: Full segment descriptor caching, GDT/LDT/IDT/TSS lookup, Ring 0/3 privilege validation, and TSS `ESP0`/`SS0` stack switching.
+- **Verified against Real Hardware (`tests/cpu-oracle.js`)**: Passes `140/140` instruction forms (`28,000/28,000` test vectors recorded on real x86 silicon), including 286+ `AAA`/`AAS` semantics (`AX ± 0x106` with `AF`/`CF` and high-byte propagation), `DAA`/`DAS`, `SHLD`/`SHRD`, `BT`/`BTS`/`BTR`/`BTC`, `BSF`/`BSR`, `MUL`/`IMUL`/`DIV`/`IDIV`, and `ADC`/`SBB`.
 
-### 3.1 High-Level BIOS Architecture
-Rather than executing an external third-party BIOS ROM binary, Hummingbird installs 5-byte real-mode trap stubs at `F000:(0xE000 + vec * 8)` for all 256 IVT vectors (`0x00..0xFF`):
-```
-stub+0: CF       IRET
-stub+1: FB       STI
-stub+2: F4       HLT
-stub+3: EB FB    JMP stub+0
-```
-When real-mode code executes `INT vec` (or when `stepInstruction` fetches `CS=0xF000, IP=0xE000 + vec*8`), `HummingbirdPC.handleBiosInterrupt(vec)` runs in JavaScript, updates CPU registers and flags on the stacked `FLAGS` word, and lets the CPU execute the `IRET` at `stub+0`. For blocking `INT 16h AH=00h/10h` (Wait for Keystroke) when no key is queued, the BIOS handler advances `IP` to `stub+1` (`STI; HLT; JMP stub+0`), allowing hardware `IRQ0` (`INT 08h`, which KolibriOS's boot menu hooks to `.newtimer` for its 2-second countdown) and `IRQ1` (`INT 09h`) to fire naturally in real mode.
+### 3.2 Paging & 4-Way Permission TLB
+- **4 KB & 4 MB (PSE) Pages**: Evaluates `U/S`, `R/W`, and `CR0.WP` permissions across PDE and PTE, sets `A` and `D` bits in physical RAM, and raises fault-restartable `#PF` (Vector 14) with architectural error codes and `CR2`.
+- **4-Array Smi-Tagged TLB (`tlbReadSys`, `tlbWriteSys`, `tlbReadUser`, `tlbWriteUser`)**: Direct-maps RAM and VBE Linear Framebuffer (`0xE0000000`) pages with O(1) dirty-list invalidation (`tlbDirtyList`) on `CR3` reloads.
 
-### 3.2 Deterministic Timing Model
-When `deterministic` mode is enabled (default):
-- All timers (`PIT8254`, `RDTSC`, port `0x61` refresh toggle, and VGA `0x3DA` vertical retrace) advance strictly as pure functions of `cpu.totalInstructions`.
-- `CMOSRTC` starts at a fixed epoch (`2025-09-29 23:24:00`, matching the reference screenshot `ref-2-desktop.png`) and increments 1 second per 100,000,000 instructions.
-- Two runs of the same floppy image are guaranteed to produce identical framebuffers and register states at every instruction count.
+### 3.3 High-Speed Basic-Block Cache (`decodeBasicBlock` / `execBasicBlock`)
+- **77 Inlined Micro-Op Cases**: Covers 32-bit and 16-bit (`0x66`) ALU, `MOV`, `MOVZX`/`MOVSX`, `LEA`, `TEST`, `CMP`, `INC`/`DEC`, `PUSH`/`POP`, `SHL`/`SHR`/`SAR`/`ROL`/`ROR`, `SHLD`/`SHRD`, `IMUL`, `XCHG`, `BSSWAP`, `SETcc`, `BT*`, `LOOPcc`, `Jcc` (with intra-block backward loop chaining up to 64 iterations), `JMP`, `CALL`, and `RET`.
+- **Same-Realm Lexical Execution (`loadCoreFromHtml`)**: Running the core in Node via same-realm `Function` evaluation (avoiding V8 cross-realm `TypedArray` prototype interceptors) combined with the extended block cache reaches **50.35 MIPS in Headless Chromium** and **49.32 MIPS in Node.js**.
+
+## 4. Storage, Input & Observational Guest Detectors
+
+### 4.1 82077AA Floppy Disk Controller & 8237 DMA Channel 2
+In addition to BIOS `INT 13h`, Hummingbird 1.1 emulates the hardware **Intel 82077AA FDC (`0x3F0–0x3F7`)** paired with **Intel 8237A DMA Channel 2 (`0x00–0x0F`, Page `0x81`)** and **PIC `IRQ6` (`INT 0Eh`)**, supporting DMA-driven multi-sector `READ DATA` (`0x06`), `WRITE DATA` (`0x05`), `RECALIBRATE` (`0x07`), `SEEK` (`0x0F`), `SENSE INTERRUPT STATUS` (`0x08`), `SPECIFY` (`0x03`), `READ ID` (`0x0A`), and `CONFIGURE` (`0x13`).
+
+### 4.2 Observational KolibriOS Detectors
+All guest inspection helpers (`findKolibriMouseAddr`, `findKolibriMsgBoardAddr`, `getKolibriWindowTitles`, `hasFloppyFile`) are strictly observational (never mutating guest RAM during detection):
+- **`findKolibriMsgBoardAddr`**: Dynamically locates KolibriOS's `msg_board_data` ring buffer in physical RAM by scanning for the `"K : Kernel v"` / `"K : "` signature with a valid byte count header, supporting both the studio floppy (`0x4F36A`) and the official nightly (`0x4C86A`).
+- **`findKolibriMouseAddr`**: Probes for the `MOUSE_X`/`MOUSE_Y` coordinate pair (`(512, 384)`) adjacent to `Screen_Max_X`/`Screen_Max_Y` (`(1023, 767)`), supporting both `0x4F32A` (studio) and `0x4C82A` (official).

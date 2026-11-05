@@ -1,0 +1,25 @@
+# For booting OpenBSD
+menuentry "OpenBSD" {
+        set root=(hd0,openbsd1)
+        kopenbsd /bsd
+}
+
+# For booting Microsoft Windows
+menuentry "Microsoft Windows" {
+        set root=(hd0,msdos1)
+        chainloader +1
+}
+
+# For booting Memtest86+
+menuentry "Memtest86+" {
+        set root=(hd0,1)
+        linux16 /memtest86+.bin
+}
+
+# Change the colors.
+menuentry "Change the colors" {
+        set menu_color_normal=light-green/brown
+        set menu_color_highlight=red/blue
+}
+
+grub>

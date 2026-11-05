@@ -1,0 +1,59 @@
+K : OS version: 0.7.7.0
+K : Kernel ABI: 40.0
+K : 1 CPU detected
+K: AHCI controller not found
+K : driver /sys/drivers/vidintel.sys mapped to 80989000
+K : Attach Interrupt 1 Handler 80026120
+K : IRQ1 return code 8006BD60
+K : driver /sys/drivers/PS2MOUSE.SYS mapped to 80A9B000
+K : Attach Interrupt 12 Handler 80A9B567
+L: /SYS/SETUP Param: BOOT
+L: /SYS/LOADDRV Param: I2CHID
+L: /SYS/@TASKBAR Param: 
+K : driver /sys/drivers/I2CHID.sys mapped to 80ABD000
+i2chid: loading
+i2chid: settings speed 100, jitter 1/45, scroll 64/0, tap 1/1, rclick 1, zones 15%/50%
+i2chid: no usable HID over I2C device found (0 controllers tried)
+E: LoadDrv: Error loading driver
+I: Usage: loaddrv <driver_name>
+I: Driver must be stored as /sys/drivers/<driver_name>.sys
+I: <driver_name> must be w/o extension and it is case-sensitive
+L: /SYS/ESKIN Param: 
+L: /SYS/@ICON Param: 
+L: /SYS/TMPDISK Param: A0
+L: /SYS/@RESHARE Param: 
+L: /SYS/LOADDRV Param: SDHCI
+L: /SYS/@DOCKY Param: 
+K : driver /sys/drivers/SDHCI.sys mapped to 80AD8000
+SDHCI: Loading driver
+SDHCI: Controller not found
+E: LoadDrv: Error loading driver
+I: Usage: loaddrv <driver_name>
+I: Driver must be stored as /sys/drivers/<driver_name>.sys
+I: <driver_name> must be w/o extension and it is case-sensitive
+L: /SYS/NETWORK/NETCFG Param: A
+L: /SYS/NETWORK/@ZEROCONF Param: 
+Zero-config service loaded
+L: /SYS/@SS Param: ASSM
+L: /SYS/@VOLUME Param: 
+K : driver /sys/drivers/SOUND.sys mapped to 80AC6000
+Detecting hardware...
+No compatible soundcard found!
+Loading SB16
+L: /SYS/SEARCHAP Param: 
+K : driver /sys/drivers/SB16.sys mapped to 80ABA000
+detecting hardware...
+exiting... May be some problems found?
+K : destroy app object
+L: /SYS/@HA Param: 
+L: AUTORUN.DAT processed
+K : Process - forced terminate PID: 00000014 [SEARCHAP]
+K : Page fault
+K : EAX : 00000000 EBX : 0000002C ECX : FFFFF720
+K : EDX : 00000746 ESI : 00006007 EDI : 00000B25
+K : EBP : 00000001 EIP : 0000048E ESP : 00005B58
+K : Flags : 00001202 CS : 0000001B (application)
+K : Stack dump:
+K : [ESP+00]: 0000036F [ESP+04]: 00006006 [ESP+08]: 00000169
+K : [ESP+12]: 00000000 [ESP+16]: 00000000 [ESP+20]: 00000000
+K : [ESP+24]: 00000000 [ESP+28]: 00000000 [ESP+32]: 00000000

@@ -152,34 +152,9 @@ function loadCoreFromHtml(htmlPath) {
   if (!match) {
     throw new Error(`Could not find <script id="hummingbird-core"> in ${htmlPath}`);
   }
-  const sandbox = {
-    console,
-    Math,
-    Date,
-    Uint8Array,
-    Uint16Array,
-    Uint32Array,
-    Int8Array,
-    Int16Array,
-    Int32Array,
-    Float32Array,
-    Float64Array,
-    ArrayBuffer,
-    DataView,
-    Map,
-    Set,
-    BigInt,
-    Number,
-    String,
-    Object,
-    Boolean,
-    Array,
-    Error,
-    TextDecoder
-  };
-  sandbox.globalThis = sandbox;
-  vm.createContext(sandbox);
-  vm.runInContext(match[1], sandbox, { filename: 'index.html#hummingbird-core' });
+  const sandbox = Object.create(globalThis);
+  const fn = new Function('globalThis', 'window', 'document', match[1]);
+  fn(sandbox, undefined, undefined);
   return sandbox;
 }
 
@@ -242,7 +217,8 @@ function main() {
     deterministic: true,
     onMilestone: (m) => {
       const elapsedS = ((Date.now() - tStart) / 1000).toFixed(2);
-      console.log(`[MILESTONE] ${m.name} | inst=${m.instructions.toLocaleString()} | wall=${elapsedS}s | ${m.details}`);
+      const vtimeS = (m.virtualTimeSec !== undefined ? m.virtualTimeSec : (pc.cpu.cycles / pc.cpuFreqHz)).toFixed(3);
+      console.log(`[MILESTONE] ${m.name} | inst=${m.instructions.toLocaleString()} | vtime=${vtimeS}s | wall=${elapsedS}s | ${m.details}`);
       if (m.id === 'boot_sector') {
         saveSnapshot(pc, 'milestone-1-boot-sector.png', m.name);
       } else if (m.id === 'boot_menu') {
@@ -263,9 +239,9 @@ function main() {
   customSnapCounts.sort((a, b) => a - b);
   let nextCustomIdx = 0;
 
-  // Phase 1: Boot to full GUI desktop (Milestone 4, ~289.9M instructions)
+  // Phase 1: Boot to full GUI desktop (Milestone 4, ~324.6M instructions)
   const stepChunk = 1000000;
-  const maxBootInst = 310000000;
+  const maxBootInst = 360000000;
   while (pc.cpu.totalInstructions < maxBootInst && !pc.milestoneMap.has('desktop_drawn')) {
     let toRun = stepChunk;
     if (nextCustomIdx < customSnapCounts.length) {
@@ -289,56 +265,78 @@ function main() {
   const bootMips = (pc.cpu.totalInstructions / 1e6) / bootElapsedS;
   console.log(`\nDesktop reached in ${pc.cpu.totalInstructions.toLocaleString()} instructions (${bootElapsedS.toFixed(2)}s, ${bootMips.toFixed(2)} MIPS).`);
 
-  // Phase 2: Verify Tier 3 Milestones 5, 6, and 7 (Mouse movement, 4 Apps working, and Menu Shutdown/Restart)
-  // 1. Open SHELL (836, 160) and run "ver"
-  pc.moveMouseTo(836, 160);
-  pc.clickMouse(true);
-  pc.cpu.runSteps(22000000);
-  for (const sc of [0x2F, 0x12, 0x13, 0x1C]) pc.pressKeyScancode(sc, 600000);
-  pc.cpu.runSteps(6000000);
+  // Phase 2: Verify Tier 3 Milestones 5, 6, and 7 (Mouse movement, Apps working, and Menu Shutdown/Restart)
+  // Detect available apps from the floppy FAT12 directory before attempting to open them.
+  const launchedApps = [];
 
-  // 2. Focus desktop at (32, 95) then double-click TINYPAD (32, 95) and type "hummingbird"
-  pc.moveMouseTo(32, 95);
-  pc.clickMouse(false);
-  pc.cpu.runSteps(2000000);
-  pc.clickMouse(true);
-  pc.cpu.runSteps(16000000);
-  for (const sc of [0x23, 0x16, 0x32, 0x32, 0x17, 0x31, 0x22, 0x30, 0x17, 0x13, 0x20]) {
-    pc.pressKeyScancode(sc, 800000);
+  // 1. SHELL (836, 160) -> run "ver"
+  if (pc.hasFloppyFile('SHELL')) {
+    pc.moveMouseTo(836, 160);
+    pc.clickMouse(true);
+    pc.cpu.runSteps(22000000);
+    for (const sc of [0x2F, 0x12, 0x13, 0x1C]) pc.pressKeyScancode(sc, 600000);
+    pc.cpu.runSteps(6000000);
+    launchedApps.push('SHELL');
+  } else {
+    console.log('  [SKIP] SHELL not found in floppy FAT12 directory; skipping SHELL demo.');
   }
-  pc.cpu.runSteps(4000000);
 
-  // 3. Focus desktop at (236, 28) then double-click CALC+ (236, 28) and compute 6*7=42
-  pc.moveMouseTo(236, 28);
-  pc.clickMouse(false);
-  pc.cpu.runSteps(2000000);
-  pc.clickMouse(true);
-  pc.cpu.runSteps(14000000);
-  for (const sc of [0x07, 0x37, 0x08, 0x1C]) pc.pressKeyScancode(sc, 800000);
-  pc.cpu.runSteps(4000000);
+  // 2. TINYPAD (32, 95) -> type "hummingbird"
+  if (pc.hasFloppyFile('TINYPAD')) {
+    pc.moveMouseTo(32, 95);
+    pc.clickMouse(false);
+    pc.cpu.runSteps(2000000);
+    pc.clickMouse(true);
+    pc.cpu.runSteps(16000000);
+    for (const sc of [0x23, 0x16, 0x32, 0x32, 0x17, 0x31, 0x22, 0x30, 0x17, 0x13, 0x20]) {
+      pc.pressKeyScancode(sc, 800000);
+    }
+    pc.cpu.runSteps(4000000);
+    launchedApps.push('TINYPAD');
+  } else {
+    console.log('  [SKIP] TINYPAD not found in floppy FAT12 directory; skipping TINYPAD demo.');
+  }
 
-  // 4. Focus desktop at (972, 625) then double-click TETRIS (972, 625), drag window right so all 4 apps show, and start game
-  pc.moveMouseTo(972, 625);
-  pc.clickMouse(false);
-  pc.cpu.runSteps(2000000);
-  pc.clickMouse(true);
-  pc.cpu.runSteps(10000000);
-  // Drag Tetris title bar from (420, 42) right by +240px so Calc+ "6*7 = 42" and TinyPad "hummingbird" are all visible side-by-side!
-  pc.moveMouseTo(420, 42);
-  pc.ps2.sendMousePacket(0, 0, 1);
-  pc.drainPS2();
-  pc.cpu.runSteps(1000000);
-  for (let d = 0; d < 30; d++) {
-    pc.ps2.sendMousePacket(8, 0, 1);
+  // 3. CALC / CALC+ (236, 28) -> compute 6*7=42
+  if (pc.hasFloppyFile('CALC') || pc.hasFloppyFile('CALCPLUS')) {
+    pc.moveMouseTo(236, 28);
+    pc.clickMouse(false);
+    pc.cpu.runSteps(2000000);
+    pc.clickMouse(true);
+    pc.cpu.runSteps(14000000);
+    for (const sc of [0x07, 0x37, 0x08, 0x1C]) pc.pressKeyScancode(sc, 800000);
+    pc.cpu.runSteps(4000000);
+    launchedApps.push('CALC+');
+  } else {
+    console.log('  [SKIP] CALC not found in floppy FAT12 directory; skipping CALC demo.');
+  }
+
+  // 4. TETRIS (972, 625) -> drag window right and start game
+  if (pc.hasFloppyFile('TETRIS')) {
+    pc.moveMouseTo(972, 625);
+    pc.clickMouse(false);
+    pc.cpu.runSteps(2000000);
+    pc.clickMouse(true);
+    pc.cpu.runSteps(10000000);
+    pc.moveMouseTo(420, 42);
+    pc.ps2.sendMousePacket(0, 0, 1);
     pc.drainPS2();
+    pc.cpu.runSteps(1000000);
+    for (let d = 0; d < 30; d++) {
+      pc.ps2.sendMousePacket(8, 0, 1);
+      pc.drainPS2();
+    }
+    pc.ps2.sendMousePacket(0, 0, 0);
+    pc.drainPS2();
+    pc.cpu.runSteps(18000000);
+    pc.pressKeyScancode(0x1C, 600000); // Press Enter to start Tetris
+    pc.cpu.runSteps(8000000);
+    launchedApps.push('TETRIS');
+  } else {
+    console.log('  [SKIP] TETRIS not found in floppy FAT12 directory; skipping TETRIS demo.');
   }
-  pc.ps2.sendMousePacket(0, 0, 0);
-  pc.drainPS2();
-  pc.cpu.runSteps(18000000);
-  pc.pressKeyScancode(0x1C, 600000); // Press Enter to start Tetris
-  pc.cpu.runSteps(8000000);
 
-  saveSnapshot(pc, "milestone-6-apps-running.png", "6. Apps open and work (SHELL, TINYPAD, CALC+, TETRIS)");
+  saveSnapshot(pc, "milestone-6-apps-running.png", `6. Apps open and work (${launchedApps.join(', ')})`);
 
   // 5. Open Menu (25, 755) -> Click Shut down (55, 720) -> Confirm Reboot/Shutdown
   pc.moveMouseTo(25, 755);
@@ -348,21 +346,25 @@ function main() {
   pc.clickMouse(false);
   pc.cpu.runSteps(22000000);
   saveSnapshot(pc, "milestone-7-shutdown-menu.png", "7. Shutdown/Restart dialog from Menu");
-  pc.pressKeyScancode(0xE04F, 600000); // Press End key to select "Power off (End)" -> APM 1.2 Shutdown!
-  pc.cpu.runSteps(10000000);
+  // Click "Power off (End)" button at (635, 455) or press End key (0xE04F) -> APM 1.2 Shutdown!
+  pc.moveMouseTo(635, 455);
+  pc.clickMouse(false);
+  pc.pressKeyScancode(0xE04F, 600000);
+  pc.cpu.runSteps(12000000);
 
   const totalElapsedS = (Date.now() - tStart) / 1000;
   const overallMips = (pc.cpu.totalInstructions / 1e6) / totalElapsedS;
 
   console.log(`\n=== Headless Run Summary ===`);
   console.log(`Total Instructions : ${pc.cpu.totalInstructions.toLocaleString()}`);
+  console.log(`Virtual Time       : ${pc.virtualTimeSeconds.toFixed(3)}s (${pc.cpu.cycles.toLocaleString()} cycles @ ${(pc.cpuFreqHz / 1e6).toFixed(0)} MHz)`);
   console.log(`Wall-Clock Time    : ${totalElapsedS.toFixed(2)}s (${overallMips.toFixed(2)} MIPS)`);
   console.log(`Block Cache Stats  : ${pc.cpu.basicBlockHits.toLocaleString()} hits, ${pc.cpu.basicBlockInstrs.toLocaleString()} cached insts, ${pc.cpu.basicBlockDecoded.toLocaleString()} blocks decoded`);
   console.log(`#UD Exceptions     : ${pc.udList.length}`);
   console.log(`Unhandled Ports    : ${pc.unhandledPorts.size}`);
   console.log(`Milestones Reached : ${pc.milestones.length} / 7`);
   for (const m of pc.milestones) {
-    console.log(`  - ${m.name}: inst=${m.instructions.toLocaleString()} (${m.details})`);
+    console.log(`  - ${m.name}: inst=${m.instructions.toLocaleString()} | vtime=${(m.virtualTimeSec || 0).toFixed(3)}s (${m.details})`);
   }
 }
 

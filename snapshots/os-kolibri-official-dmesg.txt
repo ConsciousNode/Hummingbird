@@ -1,0 +1,51 @@
+K : OS version: 0.7.7.0+8930
+K : Commit ID: D50642CE
+K : Kernel ABI: 40.0
+K : 1 CPU detected
+K: AHCI controller not found
+K : driver /sys/drivers/vidintel.sys mapped to 80989000
+K : Attach Interrupt 1 Handler 80024EEC
+K : IRQ1 return code 80069260
+K : driver /sys/drivers/PS2MOUSE.SYS mapped to 80A9B000
+K : Attach Interrupt 12 Handler 80A9B567
+L: /SYS/SETUP Param: BOOT
+L: /SYS/LOADDRV Param: RDC
+K : driver /sys/drivers/RDC.sys mapped to 80AA1000
+LoadDrv: Error loading driver
+Driver must be in /sys/drivers/ folder.
+Its name must be w/o extension and it is case-sensitive
+L: /SYS/@TASKBAR Param: 
+L: /SYS/ESKIN Param: 
+L: /SYS/@ICON Param: 
+L: /SYS/TMPDISK Param: A0
+K : driver /sys/drivers/tmpdisk.sys mapped to 80AC1000
+Trying to add virtual disk /tmp0, the size of 11 MB
+TmpDisk operation completed successfully
+L: /SYS/@RESHARE Param: 
+L: /SYS/LOADDRV Param: SDHCI
+K : driver /sys/drivers/SDHCI.sys mapped to 80ADC000
+SDHCI: Loading driver
+SDHCI: Contriller not found
+LoadDrv: Error loading driver
+Driver must be in /sys/drivers/ folder.
+Its name must be w/o extension and it is case-sensitive
+L: /SYS/@DOCKY Param: 
+L: /SYS/NETWORK/NETCFG Param: A
+L: /SYS/NETWORK/@ZEROCONF Param: 
+Zero-config service loaded
+L: /SYS/@SS Param: ASSM
+L: /SYS/@VOLUME Param: 
+K : driver /sys/drivers/SOUND.sys mapped to 80AD2000
+Detecting hardware...
+No compatible PCI soundcard found!
+Loading SB16
+L: /SYS/SEARCHAP Param: 
+K : driver /sys/drivers/SB16.sys mapped to 80AD7000
+detecting hardware...
+exiting... May be some problems found?
+K : destroy app object
+L: /SYS/@HA Param: 
+Searchap: additional partition is not found!
+Searchap: second attempt after 5 seconds!
+L: AUTORUN.DAT processed
+Searchap: additional partition is not found!

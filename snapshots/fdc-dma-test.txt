@@ -1,0 +1,25 @@
+FDC+DMA2+IRQ6 READ+WRITE OK
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

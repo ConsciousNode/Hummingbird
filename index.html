@@ -632,6 +632,9 @@
     window.EMBEDDED_CARTRIDGE = null;
   </script>
   <script id="hummingbird-core">
+(() => {
+"use strict";
+const { Math, Number, BigInt, Uint8Array, Uint16Array, Uint32Array, Int8Array, Int16Array, Int32Array, Float32Array, Float64Array, ArrayBuffer, DataView, Map, Set } = globalThis;
 // ============================================================================
 // Hummingbird x86 PC Emulator — Part 1: Constants, Flags, and VGA 8x16 Font
 // ============================================================================
@@ -1891,36 +1894,169 @@ class DualPIC {
 }
 
 class PIT8254 {
-  constructor(pic) {
+  constructor(pic, pc) {
     this.pic = pic;
+    this.pc = pc;
     this.reset();
+  }
+
+  static toBCD16(v) {
+    v = Math.max(0, Math.min(9999, v | 0));
+    const d0 = v % 10;
+    const d1 = ((v / 10) | 0) % 10;
+    const d2 = ((v / 100) | 0) % 10;
+    const d3 = ((v / 1000) | 0) % 10;
+    return (d3 << 12) | (d2 << 8) | (d1 << 4) | d0;
+  }
+
+  static fromBCD16(v) {
+    const d0 = v & 0x0F;
+    const d1 = (v >>> 4) & 0x0F;
+    const d2 = (v >>> 8) & 0x0F;
+    const d3 = (v >>> 12) & 0x0F;
+    return d3 * 1000 + d2 * 100 + d1 * 10 + d0;
   }
 
   reset() {
     this.reload = new Uint32Array([65536, 18, 1193]);
-    this.count = new Uint32Array([65536, 18, 1193]);
     this.latched = new Int32Array([-1, -1, -1]);
+    this.latchedStatus = new Int16Array([-1, -1, -1]);
     this.accessMode = new Uint8Array([3, 3, 3]);
     this.readState = new Uint8Array([0, 0, 0]);
     this.writeState = new Uint8Array([0, 0, 0]);
     this.writeLatch = new Uint16Array([0, 0, 0]);
     this.mode = new Uint8Array([3, 2, 3]);
+    this.bcd = new Uint8Array([0, 0, 0]);
+    this.nullCount = new Uint8Array([0, 0, 0]);
+    this.gate = new Uint8Array([1, 1, 0]);
+    this.startCycle = new Float64Array([0, 0, 0]);
     this.port61 = 0x00;
-    this.instAccum = 0;
+    this.nextIrq0Tick = 65536;
+    this.nextIrq0Cycle = 0;
+    this.updateSchedule();
+  }
+
+  cyclesToPitTicks(cycles) {
+    const freq = (this.pc && this.pc.cpuFreqHz) ? this.pc.cpuFreqHz : 100000000;
+    return Math.floor((cycles * 1193182) / freq);
+  }
+
+  pitTicksToCycles(ticks) {
+    const freq = (this.pc && this.pc.cpuFreqHz) ? this.pc.cpuFreqHz : 100000000;
+    return Math.ceil((ticks * freq) / 1193182);
+  }
+
+  updateSchedule() {
+    if (!Number.isFinite(this.nextIrq0Tick)) {
+      this.nextIrq0Cycle = Infinity;
+    } else {
+      this.nextIrq0Cycle = this.pitTicksToCycles(this.nextIrq0Tick);
+    }
+  }
+
+  getChannelCount(ch, cycles) {
+    const reload = this.reload[ch] || 65536;
+    const mode = this.mode[ch] & 7;
+    if (ch === 2 && !this.gate[2]) {
+      return reload & 0xFFFF;
+    }
+    const elapsed = Math.max(0, this.cyclesToPitTicks(cycles) - this.cyclesToPitTicks(this.startCycle[ch]));
+    let cnt = 0;
+    if (mode === 0 || mode === 1 || mode === 4 || mode === 5) {
+      if (elapsed <= reload) {
+        cnt = (reload - elapsed) & 0xFFFF;
+      } else {
+        cnt = (65536 - ((elapsed - reload) & 0xFFFF)) & 0xFFFF;
+      }
+    } else if (mode === 3 || mode === 7) {
+      const rem = elapsed % reload;
+      const half = reload >>> 1;
+      if (rem < half) {
+        cnt = (reload - rem * 2) & 0xFFFE;
+      } else {
+        cnt = (reload - (rem - half) * 2) & 0xFFFE;
+      }
+    } else {
+      const rem = elapsed % reload;
+      cnt = (reload - rem) & 0xFFFF;
+    }
+    return this.bcd[ch] ? PIT8254.toBCD16(cnt) : cnt;
+  }
+
+  getChannelOut(ch, cycles) {
+    const reload = this.reload[ch] || 65536;
+    const mode = this.mode[ch] & 7;
+    if (ch === 2 && !this.gate[2]) {
+      return (mode === 0) ? 0 : 1;
+    }
+    const elapsed = Math.max(0, this.cyclesToPitTicks(cycles) - this.cyclesToPitTicks(this.startCycle[ch]));
+    if (mode === 0 || mode === 1) {
+      return elapsed >= reload ? 1 : 0;
+    }
+    if (mode === 2 || mode === 6) {
+      const rem = elapsed % reload;
+      const cnt = reload - rem;
+      return cnt === 1 ? 0 : 1;
+    }
+    if (mode === 3 || mode === 7) {
+      const rem = elapsed % reload;
+      return rem < (reload >>> 1) ? 1 : 0;
+    }
+    if (mode === 4 || mode === 5) {
+      return elapsed === reload ? 0 : 1;
+    }
+    return 1;
+  }
+
+  getStatusByte(ch, cycles) {
+    const out = this.getChannelOut(ch, cycles) & 1;
+    const nc = this.nullCount[ch] & 1;
+    const rw = this.accessMode[ch] & 3;
+    const m = this.mode[ch] & 7;
+    const bcd = this.bcd[ch] & 1;
+    return (out << 7) | (nc << 6) | (rw << 4) | (m << 1) | bcd;
   }
 
   writeControl(val) {
+    const cycles = (this.pc && this.pc.cpu) ? this.pc.cpu.cycles : 0;
     const ch = (val >>> 6) & 3;
-    if (ch === 3) return; // Read-back command
+    if (ch === 3) {
+      // Read-back command (0xC0..0xDF)
+      const latchCount = (val & 0x20) === 0;
+      const latchStat = (val & 0x10) === 0;
+      for (let c = 0; c < 3; c++) {
+        if (val & (1 << (c + 1))) {
+          if (latchStat && this.latchedStatus[c] === -1) {
+            this.latchedStatus[c] = this.getStatusByte(c, cycles);
+          }
+          if (latchCount && this.latched[c] === -1) {
+            this.latched[c] = this.getChannelCount(c, cycles);
+          }
+        }
+      }
+      return;
+    }
     const access = (val >>> 4) & 3;
     if (access === 0) {
-      // Latch count
-      this.latched[ch] = this.count[ch] & 0xFFFF;
+      if (this.latched[ch] === -1) {
+        this.latched[ch] = this.getChannelCount(ch, cycles);
+      }
     } else {
       this.accessMode[ch] = access;
-      this.mode[ch] = (val >>> 1) & 7;
+      let m = (val >>> 1) & 7;
+      if (m === 6) m = 2;
+      if (m === 7) m = 3;
+      this.mode[ch] = m;
+      this.bcd[ch] = val & 1;
+      this.nullCount[ch] = 1;
       this.writeState[ch] = 0;
       this.readState[ch] = 0;
+      this.latched[ch] = -1;
+      this.latchedStatus[ch] = -1;
+      if (ch === 0 && (m === 0 || m === 1 || m === 4 || m === 5)) {
+        this.nextIrq0Tick = Infinity;
+        this.updateSchedule();
+      }
     }
   }
 
@@ -1946,12 +2082,27 @@ class PIT8254 {
   }
 
   setReload(ch, r) {
-    this.reload[ch] = (r === 0) ? 65536 : r;
-    this.count[ch] = this.reload[ch];
+    const cycles = (this.pc && this.pc.cpu) ? this.pc.cpu.cycles : 0;
+    const maxR = this.bcd[ch] ? 10000 : 65536;
+    const decoded = (this.bcd[ch] && r !== 0) ? PIT8254.fromBCD16(r) : r;
+    this.reload[ch] = (decoded === 0) ? maxR : decoded;
+    this.nullCount[ch] = 0;
+    this.startCycle[ch] = cycles;
+    if (ch === 0) {
+      const startTick = this.cyclesToPitTicks(cycles);
+      this.nextIrq0Tick = startTick + this.reload[0];
+      this.updateSchedule();
+    }
   }
 
   readChannel(ch) {
-    const val = (this.latched[ch] !== -1) ? this.latched[ch] : (this.count[ch] & 0xFFFF);
+    const cycles = (this.pc && this.pc.cpu) ? this.pc.cpu.cycles : 0;
+    if (this.latchedStatus[ch] !== -1) {
+      const st = this.latchedStatus[ch];
+      this.latchedStatus[ch] = -1;
+      return st & 0xFF;
+    }
+    const val = (this.latched[ch] !== -1) ? this.latched[ch] : this.getChannelCount(ch, cycles);
     const acc = this.accessMode[ch];
     if (acc === 1) {
       this.latched[ch] = -1;
@@ -1971,33 +2122,41 @@ class PIT8254 {
     }
   }
 
-  step(cpuHalted, inProtectedMode, totalInstructions) {
-    // Advance channel 0 counter
-    const delta = cpuHalted ? (inProtectedMode ? 10000 : 250) : 1;
-    this.instAccum += delta;
-    if (this.count[0] > delta) {
-      this.count[0] -= delta;
-    } else {
-      this.count[0] = this.reload[0];
-    }
-    // In real mode (boot menu countdown), fire IRQ0 every 1000 accum steps.
-    // In protected mode (100 Hz OS timer), fire IRQ0 every 25000 accum steps.
-    const period = inProtectedMode ? 1000000 : 1000;
-    if (this.instAccum >= period) {
-      this.instAccum -= period;
+  step(cycles) {
+    if (cycles >= this.nextIrq0Cycle) {
       this.pic.raiseIRQ(0);
+      const m = this.mode[0] & 7;
+      if (m === 0 || m === 1 || m === 4 || m === 5) {
+        this.nextIrq0Tick = Infinity;
+        this.nextIrq0Cycle = Infinity;
+      } else {
+        const reload = this.reload[0] || 65536;
+        const curTick = this.cyclesToPitTicks(cycles);
+        this.nextIrq0Tick += reload;
+        if (this.nextIrq0Tick <= curTick) {
+          const missed = Math.floor((curTick - this.nextIrq0Tick) / reload) + 1;
+          this.nextIrq0Tick += missed * reload;
+        }
+        this.updateSchedule();
+      }
     }
   }
 
-  readPort61(totalInstructions) {
-    // Bit 4 toggles every 4 instructions (used by KolibriOS delay_ms);
-    // Bit 5 is timer 2 output.
-    const toggle = ((totalInstructions >>> 2) & 1) << 4;
-    const out2 = ((totalInstructions >>> 5) & 1) << 5;
+  readPort61(cycles) {
+    // Bit 4 (DRAM refresh) toggles every 18 PIT ticks (15.0857 us of virtual time).
+    // Bit 5 is PIT Channel 2 output.
+    const pitTicks = this.cyclesToPitTicks(cycles);
+    const toggle = (Math.floor(pitTicks / 18) & 1) << 4;
+    const out2 = (this.getChannelOut(2, cycles) & 1) << 5;
     return (this.port61 & 0x0F) | toggle | out2;
   }
 
-  writePort61(val) {
+  writePort61(val, cycles) {
+    const newGate = val & 0x01;
+    if (newGate && !this.gate[2]) {
+      this.startCycle[2] = cycles;
+    }
+    this.gate[2] = newGate;
     this.port61 = val & 0x0F;
   }
 }
@@ -2010,7 +2169,7 @@ class CMOSRTC {
     this.reset();
   }
 
-   static toBCD(v) {
+  static toBCD(v) {
     v = Math.max(0, Math.min(99, v | 0));
     return (((v / 10) | 0) << 4) | (v % 10);
   }
@@ -2018,7 +2177,7 @@ class CMOSRTC {
   reset() {
     this.regs.fill(0);
     this.index = 0;
-    // Fixed deterministic date/time matching ref-2-desktop.png (2025-09-29 23:24:00)
+    // Fixed deterministic start date/time matching ref-2-desktop.png (2025-09-29 23:24:00)
     this.regs[0x00] = 0x00; // Seconds
     this.regs[0x02] = 0x24; // Minutes (24)
     this.regs[0x04] = 0x23; // Hours (23)
@@ -2034,10 +2193,6 @@ class CMOSRTC {
     this.regs[0x0D] = 0x80; // Status Reg D (Bit 7 = 1: CMOS battery power good!)
 
     // Register 0x10: Floppy drive type.
-    // Note: KolibriOS loads the floppy into RAMDISK via BIOS int 13h in real mode.
-    // Setting 0x10 to 0x40 (1.44MB 3.5" drive A:) or 0x00:
-    // As noted in prompt: "So after boot the kernel never needs a floppy controller."
-    // In detect/dev_fd.inc, if CMOS[0x10] == 0, kernel skips physical FDC init cleanly while keeping /rd/1 ramdisk!
     this.regs[0x10] = 0x00;
 
     // Base memory 640 KB
@@ -2059,8 +2214,8 @@ class CMOSRTC {
 
   updateLiveClock() {
     if (this.pc.deterministic) {
-      // Advance seconds deterministically only every 50,000,000 instructions so clock stays at 23:24 during boot
-      const totalSec = Math.floor(this.pc.cpu.totalInstructions / 50000000);
+      // Seconds of virtual time derived directly from unified virtual clock (cycles / cpuFreqHz)
+      const totalSec = Math.floor(this.pc.cpu.cycles / this.pc.cpuFreqHz);
       const sec = totalSec % 60;
       const min = (24 + Math.floor(totalSec / 60)) % 60;
       const hr = (23 + Math.floor(totalSec / 3600)) % 24;
@@ -2789,10 +2944,19 @@ class VGADisplay {
         return this.crtcRegs[this.crtcIndex & 0xFF];
       case 0x3DA:
       case 0x3BA: {
-        // Toggle vertical retrace (bit 3 = 0x08) and display enable (bit 0 = 0x01)
+        // Derive vertical retrace (bit 3 = 0x08) and horizontal/display blanking (bit 0 = 0x01)
+        // from the unified virtual clock at a 60 Hz refresh rate (16.6667 ms frame, ~1.2 ms VBlank).
         this.attrFlipFlop = 0;
-        this.retraceToggle = (this.retraceToggle + 1) & 3;
-        return (this.retraceToggle === 0) ? 0x09 : 0x00;
+        const cycles = (this.pc && this.pc.cpu) ? this.pc.cpu.cycles : 0;
+        const freq = (this.pc && this.pc.cpuFreqHz) ? this.pc.cpuFreqHz : 100000000;
+        const frameCycles = Math.floor(freq / 60);
+        const posInFrame = cycles % frameCycles;
+        const vblankCycles = Math.floor(frameCycles * 0.075);
+        const scanlineCycles = Math.max(1, Math.floor(frameCycles / 525));
+        const posInLine = posInFrame % scanlineCycles;
+        const hblank = (posInLine < Math.floor(scanlineCycles * 0.18)) ? 0x01 : 0x00;
+        const vblank = (posInFrame < vblankCycles) ? 0x09 : hblank;
+        return vblank;
       }
       default:
         return 0;
@@ -2965,10 +3129,506 @@ class VGADisplay {
   }
 }
 
+class DMA8237 {
+  constructor(pc) {
+    this.pc = pc;
+    this.reset();
+  }
+
+  reset() {
+    this.baseAddr = new Uint16Array(4);
+    this.currAddr = new Uint16Array(4);
+    this.baseCount = new Uint16Array(4);
+    this.currCount = new Uint16Array(4);
+    this.page = new Uint8Array(4);
+    this.mode = new Uint8Array(4);
+    this.mask = 0x0F;
+    this.status = 0x00;
+    this.command = 0x00;
+    this.flipFlop = 0;
+  }
+
+  getPhysAddr(ch) {
+    return (((this.page[ch & 3] & 0xFF) << 16) | (this.currAddr[ch & 3] & 0xFFFF)) >>> 0;
+  }
+
+  transferFromDevice(ch, srcBytes) {
+    ch &= 3;
+    if (this.mask & (1 << ch)) return 0;
+    const maxLen = (this.currCount[ch] & 0xFFFF) + 1;
+    const n = Math.min(srcBytes.length, maxLen);
+    const dec = (this.mode[ch] & 0x20) !== 0;
+    const autoInit = (this.mode[ch] & 0x10) !== 0;
+    const verifyOnly = ((this.mode[ch] >>> 2) & 3) === 0;
+    for (let i = 0; i < n; i++) {
+      if (!verifyOnly) {
+        const phys = (((this.page[ch] & 0xFF) << 16) | (this.currAddr[ch] & 0xFFFF)) >>> 0;
+        this.pc.physWrite8(phys, srcBytes[i]);
+      }
+      this.currAddr[ch] = (this.currAddr[ch] + (dec ? -1 : 1)) & 0xFFFF;
+      if (this.currCount[ch] === 0) {
+        this.status |= (1 << ch); // Terminal count (TC) reached
+        if (autoInit) {
+          this.currAddr[ch] = this.baseAddr[ch];
+          this.currCount[ch] = this.baseCount[ch];
+        } else {
+          this.currCount[ch] = 0xFFFF;
+        }
+        return i + 1;
+      } else {
+        this.currCount[ch] = (this.currCount[ch] - 1) & 0xFFFF;
+      }
+    }
+    return n;
+  }
+
+  transferToDevice(ch, byteCount) {
+    ch &= 3;
+    const out = new Uint8Array(byteCount);
+    if (this.mask & (1 << ch)) return out;
+    const maxLen = (this.currCount[ch] & 0xFFFF) + 1;
+    const n = Math.min(byteCount, maxLen);
+    const dec = (this.mode[ch] & 0x20) !== 0;
+    const autoInit = (this.mode[ch] & 0x10) !== 0;
+    for (let i = 0; i < n; i++) {
+      const phys = (((this.page[ch] & 0xFF) << 16) | (this.currAddr[ch] & 0xFFFF)) >>> 0;
+      out[i] = this.pc.physRead8(phys);
+      this.currAddr[ch] = (this.currAddr[ch] + (dec ? -1 : 1)) & 0xFFFF;
+      if (this.currCount[ch] === 0) {
+        this.status |= (1 << ch);
+        if (autoInit) {
+          this.currAddr[ch] = this.baseAddr[ch];
+          this.currCount[ch] = this.baseCount[ch];
+        } else {
+          this.currCount[ch] = 0xFFFF;
+        }
+        break;
+      } else {
+        this.currCount[ch] = (this.currCount[ch] - 1) & 0xFFFF;
+      }
+    }
+    return out;
+  }
+
+  portRead(port) {
+    if (port < 0x08) {
+      const ch = port >>> 1;
+      const isCount = (port & 1) !== 0;
+      const val = isCount ? this.currCount[ch] : this.currAddr[ch];
+      if (this.flipFlop === 0) {
+        this.flipFlop = 1;
+        return val & 0xFF;
+      } else {
+        this.flipFlop = 0;
+        return (val >>> 8) & 0xFF;
+      }
+    }
+    switch (port) {
+      case 0x08: {
+        const st = this.status;
+        this.status &= 0xF0;
+        return st;
+      }
+      case 0x0F: return this.mask;
+      case 0x87: return this.page[0];
+      case 0x83: return this.page[1];
+      case 0x81: return this.page[2];
+      case 0x82: return this.page[3];
+      default: return 0x00;
+    }
+  }
+
+  portWrite(port, val) {
+    val &= 0xFF;
+    if (port < 0x08) {
+      const ch = port >>> 1;
+      const isCount = (port & 1) !== 0;
+      if (this.flipFlop === 0) {
+        this.flipFlop = 1;
+        if (isCount) {
+          this.baseCount[ch] = (this.baseCount[ch] & 0xFF00) | val;
+          this.currCount[ch] = this.baseCount[ch];
+        } else {
+          this.baseAddr[ch] = (this.baseAddr[ch] & 0xFF00) | val;
+          this.currAddr[ch] = this.baseAddr[ch];
+        }
+      } else {
+        this.flipFlop = 0;
+        if (isCount) {
+          this.baseCount[ch] = (this.baseCount[ch] & 0x00FF) | (val << 8);
+          this.currCount[ch] = this.baseCount[ch];
+        } else {
+          this.baseAddr[ch] = (this.baseAddr[ch] & 0x00FF) | (val << 8);
+          this.currAddr[ch] = this.baseAddr[ch];
+        }
+      }
+      return;
+    }
+    switch (port) {
+      case 0x08: this.command = val; break;
+      case 0x0A: {
+        const ch = val & 3;
+        if (val & 4) this.mask |= (1 << ch);
+        else this.mask &= ~(1 << ch);
+        break;
+      }
+      case 0x0B: {
+        const ch = val & 3;
+        this.mode[ch] = val;
+        break;
+      }
+      case 0x0C: this.flipFlop = 0; break;
+      case 0x0D: this.reset(); break;
+      case 0x0E: this.mask = 0x00; break;
+      case 0x0F: this.mask = val & 0x0F; break;
+      case 0x87: this.page[0] = val; break;
+      case 0x83: this.page[1] = val; break;
+      case 0x81: this.page[2] = val; break;
+      case 0x82: this.page[3] = val; break;
+    }
+  }
+}
+
+class FDC82077AA {
+  constructor(pc) {
+    this.pc = pc;
+    this.reset();
+  }
+
+  reset() {
+    this.dor = 0x0C; // DMA/IRQ enabled, controller enabled (not in reset)
+    this.msr = 0x80; // RQM = 1, DIO = 0
+    this.ccr = 0x00; // 500 kbps (1.44 MB MFM)
+    this.dsr = 0x00;
+    this.dir = 0x00; // Disk change = 0 (media present)
+    this.cyl = new Uint8Array(4);
+    this.head = new Uint8Array(4);
+    this.sector = new Uint8Array([1, 1, 1, 1]);
+    this.st0 = 0x00;
+    this.st1 = 0x00;
+    this.st2 = 0x00;
+    this.srtHut = 0xDF;
+    this.hltNd = 0x02;
+    this.locked = 0;
+    this.cmdBuf = [];
+    this.expectedParams = 0;
+    this.resultQueue = [];
+    this.senseQueue = [];
+  }
+
+  raiseIRQ6() {
+    if (this.dor & 0x08) {
+      this.pc.pic.raiseIRQ(6);
+    }
+  }
+
+  getGeometry() {
+    let secPerTrk = 18;
+    let numHeads = 2;
+    const img = this.pc.floppyImage;
+    if (img && img.length >= 32) {
+      const bpbSpt = img[24] | (img[25] << 8);
+      const bpbHeads = img[26] | (img[27] << 8);
+      if (bpbSpt >= 9 && bpbSpt <= 63) secPerTrk = bpbSpt;
+      if (bpbHeads >= 1 && bpbHeads <= 16) numHeads = bpbHeads;
+    }
+    return { secPerTrk, numHeads };
+  }
+
+  getCommandParamCount(cmdByte) {
+    const op = cmdByte & 0x1F;
+    switch (op) {
+      case 0x03: return 2; // Specify
+      case 0x04: return 1; // Sense Drive Status
+      case 0x05:           // Write Data
+      case 0x09: return 8; // Write Deleted Data
+      case 0x06:           // Read Data
+      case 0x0C:           // Read Deleted Data
+      case 0x02: return 8; // Read Track
+      case 0x07: return 1; // Recalibrate
+      case 0x08: return 0; // Sense Interrupt Status
+      case 0x0A: return 1; // Read ID
+      case 0x0D: return 5; // Format Track
+      case 0x0E: return 0; // Dump Registers
+      case 0x0F: return 2; // Seek
+      case 0x10: return 0; // Version
+      case 0x12: return 1; // Perpendicular Mode
+      case 0x13: return 3; // Configure
+      case 0x14: return 0; // Lock / Unlock
+      default: return 0;
+    }
+  }
+
+  portRead(port) {
+    switch (port) {
+      case 0x3F0: return 0x00; // Status Register A (SRA)
+      case 0x3F1: return 0x00; // Status Register B (SRB)
+      case 0x3F2: return this.dor;
+      case 0x3F3: return 0x20; // Tape Drive Register
+      case 0x3F4: { // Main Status Register (MSR)
+        if (this.resultQueue.length > 0) {
+          return 0xD0; // RQM=1, DIO=1 (FDC->CPU), CB=1
+        }
+        if (this.cmdBuf.length > 0) {
+          return 0x90; // RQM=1, DIO=0 (CPU->FDC), CB=1
+        }
+        return 0x80; // RQM=1, DIO=0, CB=0
+      }
+      case 0x3F5: { // Data FIFO
+        if (this.resultQueue.length > 0) {
+          const b = this.resultQueue.shift();
+          return b & 0xFF;
+        }
+        return 0x00;
+      }
+      case 0x3F7: { // Digital Input Register (DIR)
+        // Bit 7 = Disk Change (0 when floppy image is loaded)
+        return this.pc.floppyImage ? 0x00 : 0x80;
+      }
+      default: return 0x00;
+    }
+  }
+
+  portWrite(port, val) {
+    val &= 0xFF;
+    switch (port) {
+      case 0x3F2: { // Digital Output Register (DOR)
+        const prevReset = (this.dor & 0x04) === 0;
+        const nowReset = (val & 0x04) === 0;
+        this.dor = val;
+        if (nowReset) {
+          this.cmdBuf = [];
+          this.resultQueue = [];
+          this.senseQueue = [];
+        } else if (prevReset && !nowReset) {
+          // Leaving reset: queue 4 Sense Interrupt Status transitions (drives 0..3) and raise IRQ6
+          this.cmdBuf = [];
+          this.resultQueue = [];
+          this.senseQueue = [
+            [0xC0, this.cyl[0]],
+            [0xC1, this.cyl[1]],
+            [0xC2, this.cyl[2]],
+            [0xC3, this.cyl[3]]
+          ];
+          this.raiseIRQ6();
+        }
+        break;
+      }
+      case 0x3F4: { // Datarate Select Register (DSR)
+        if (val & 0x80) {
+          // Software reset pulse
+          this.cmdBuf = [];
+          this.resultQueue = [];
+          this.senseQueue = [
+            [0xC0, this.cyl[0]],
+            [0xC1, this.cyl[1]],
+            [0xC2, this.cyl[2]],
+            [0xC3, this.cyl[3]]
+          ];
+          this.raiseIRQ6();
+        }
+        this.dsr = val & 0x7F;
+        break;
+      }
+      case 0x3F5: { // Data FIFO
+        if ((this.dor & 0x04) === 0) return; // In reset
+        if (this.cmdBuf.length === 0) {
+          this.resultQueue = [];
+          this.cmdBuf.push(val);
+          this.expectedParams = this.getCommandParamCount(val);
+        } else {
+          this.cmdBuf.push(val);
+        }
+        if (this.cmdBuf.length === 1 + this.expectedParams) {
+          const cmd = this.cmdBuf.slice();
+          this.cmdBuf = [];
+          this.executeCommand(cmd);
+        }
+        break;
+      }
+      case 0x3F7: // Configuration Control Register (CCR)
+        this.ccr = val & 0x03;
+        break;
+    }
+  }
+
+  executeCommand(cmd) {
+    const op = cmd[0] & 0x1F;
+    switch (op) {
+      case 0x03: { // Specify (SRT/HUT, HLT/ND)
+        this.srtHut = cmd[1];
+        this.hltNd = cmd[2];
+        break;
+      }
+      case 0x04: { // Sense Drive Status
+        const drv = cmd[1] & 3;
+        const hd = (cmd[1] >>> 2) & 1;
+        // ST3: bit 6 = WP (0), bit 5 = Ready (1), bit 4 = Track 0, bit 3 = Two-side (1), bit 2 = Head, bits 1:0 = Drive
+        const trk0 = (this.cyl[drv] === 0) ? 0x10 : 0x00;
+        const st3 = 0x28 | trk0 | (hd << 2) | drv;
+        this.resultQueue = [st3];
+        break;
+      }
+      case 0x07: { // Recalibrate
+        const drv = cmd[1] & 3;
+        this.cyl[drv] = 0;
+        this.head[drv] = 0;
+        this.st0 = 0x20 | drv; // Seek End = 1, normal termination (bits 7:6 = 00)
+        this.senseQueue.push([this.st0, 0]);
+        this.raiseIRQ6();
+        break;
+      }
+      case 0x08: { // Sense Interrupt Status
+        if (this.senseQueue.length > 0) {
+          const [st0, pcn] = this.senseQueue.shift();
+          this.resultQueue = [st0, pcn];
+        } else {
+          this.resultQueue = [0x80, this.cyl[0]]; // Invalid command if no interrupt pending
+        }
+        break;
+      }
+      case 0x0F: { // Seek (cmd, HD<<2|drv, NCN)
+        const drv = cmd[1] & 3;
+        const hd = (cmd[1] >>> 2) & 1;
+        const ncn = cmd[2] & 0xFF;
+        this.cyl[drv] = ncn;
+        this.head[drv] = hd;
+        // Per 82077AA datasheet, H bit in ST0 after SEEK is 0, Seek End (bit 5) = 1
+        this.st0 = 0x20 | drv;
+        this.senseQueue.push([this.st0, ncn]);
+        this.raiseIRQ6();
+        break;
+      }
+      case 0x0A: { // Read ID
+        const drv = cmd[1] & 3;
+        const hd = (cmd[1] >>> 2) & 1;
+        this.head[drv] = hd;
+        this.st0 = (hd << 2) | drv;
+        this.st1 = 0x00;
+        this.st2 = 0x00;
+        this.resultQueue = [this.st0, this.st1, this.st2, this.cyl[drv], hd, this.sector[drv], 2];
+        this.raiseIRQ6();
+        break;
+      }
+      case 0x06: // Read Data
+      case 0x0C: // Read Deleted Data
+      case 0x05: // Write Data
+      case 0x09: { // Write Deleted Data
+        const isWrite = (op === 0x05 || op === 0x09);
+        const mt = (cmd[0] & 0x80) !== 0;
+        const drv = cmd[1] & 3;
+        let c = cmd[2] & 0xFF;
+        let h = cmd[3] & 0xFF;
+        let r = cmd[4] & 0xFF;
+        const n = cmd[5] & 0xFF;
+        const eot = cmd[6] & 0xFF;
+        const sectorSize = (n === 0) ? (cmd[8] || 128) : (128 << Math.min(6, n));
+
+        if (drv !== 0 || !this.pc.floppyImage) {
+          this.st0 = 0x40 | (h << 2) | drv; // Abnormal termination
+          this.st1 = 0x04; // No Data
+          this.st2 = 0x00;
+          this.resultQueue = [this.st0, this.st1, this.st2, c, h, r, n];
+          this.raiseIRQ6();
+          break;
+        }
+
+        const { secPerTrk, numHeads } = this.getGeometry();
+        const dmaBytes = (this.pc.dma.currCount[2] & 0xFFFF) + 1;
+        const numSectors = Math.max(1, Math.ceil(dmaBytes / sectorSize));
+        const img = this.pc.floppyImage;
+
+        if (!isWrite) {
+          const buf = new Uint8Array(numSectors * sectorSize);
+          for (let s = 0; s < numSectors; s++) {
+            const lba = (c * numHeads + h) * secPerTrk + (r - 1);
+            const imgOff = lba * 512;
+            const dstOff = s * sectorSize;
+            for (let b = 0; b < sectorSize; b++) {
+              buf[dstOff + b] = (imgOff + b >= 0 && imgOff + b < img.length) ? img[imgOff + b] : 0;
+            }
+            // Advance CHS
+            r++;
+            if (r > (eot || secPerTrk)) {
+              r = 1;
+              if (mt) {
+                h ^= 1;
+                if (h === 0) c++;
+              } else {
+                c++;
+              }
+            }
+          }
+          this.pc.dma.transferFromDevice(2, buf);
+        } else {
+          const raw = this.pc.dma.transferToDevice(2, numSectors * sectorSize);
+          for (let s = 0; s < numSectors; s++) {
+            const lba = (c * numHeads + h) * secPerTrk + (r - 1);
+            const imgOff = lba * 512;
+            const srcOff = s * sectorSize;
+            for (let b = 0; b < sectorSize; b++) {
+              if (imgOff + b >= 0 && imgOff + b < img.length) {
+                img[imgOff + b] = raw[srcOff + b];
+              }
+            }
+            r++;
+            if (r > (eot || secPerTrk)) {
+              r = 1;
+              if (mt) {
+                h ^= 1;
+                if (h === 0) c++;
+              } else {
+                c++;
+              }
+            }
+          }
+        }
+
+        this.cyl[drv] = c & 0xFF;
+        this.head[drv] = h & 1;
+        this.sector[drv] = r & 0xFF;
+        this.st0 = ((h & 1) << 2) | drv; // Normal termination (bits 7:6 = 00)
+        this.st1 = 0x00;
+        this.st2 = 0x00;
+        this.resultQueue = [this.st0, this.st1, this.st2, c & 0xFF, h & 0xFF, r & 0xFF, n];
+        this.raiseIRQ6();
+        break;
+      }
+      case 0x10: { // Version -> 0x90 (82077AA)
+        this.resultQueue = [0x90];
+        break;
+      }
+      case 0x12: { // Perpendicular Mode
+        break;
+      }
+      case 0x13: { // Configure
+        break;
+      }
+      case 0x14: { // Lock / Unlock
+        this.locked = (cmd[0] & 0x80) ? 0x10 : 0x00;
+        this.resultQueue = [this.locked];
+        break;
+      }
+      case 0x0E: { // Dump Registers
+        this.resultQueue = [
+          this.cyl[0], this.cyl[1], this.cyl[2], this.cyl[3],
+          this.srtHut, this.hltNd, 18, this.locked, 0x00, 0x00
+        ];
+        break;
+      }
+      default: {
+        this.resultQueue = [0x80];
+        break;
+      }
+    }
+  }
+}
+
 class HummingbirdPC {
   constructor(options = {}) {
     this.ramSizeMB = Math.max(16, Math.min(256, options.ramSizeMB || 64));
     this.ramSize = this.ramSizeMB * 1024 * 1024;
+    this.cpuFreqHz = Math.max(1000000, options.cpuFreqHz || 100000000);
     this.deterministic = options.deterministic !== undefined ? Boolean(options.deterministic) : true;
     this.onMilestone = options.onMilestone || null;
     this.onDebugChar = options.onDebugChar || null;
@@ -2981,11 +3641,13 @@ class HummingbirdPC {
     this.isKolibriImage = false;
 
     this.pic = new DualPIC();
-    this.pit = new PIT8254(this.pic);
+    this.pit = new PIT8254(this.pic, this);
     this.cmos = new CMOSRTC(this);
     this.ps2 = new PS2Controller8042(this);
     this.pci = new PCIBus(this);
     this.vga = new VGADisplay(this);
+    this.dma = new DMA8237(this);
+    this.fdc = new FDC82077AA(this);
     this.cpu = new X86CPU(this);
 
     this.reset();
@@ -3005,22 +3667,34 @@ class HummingbirdPC {
     this.milestones = [];
     this.milestoneMap = new Map();
     this.initialMousePos = null;
+    this.kbdE0 = false;
+    this._mouseAddr = 0;
+    this._msgBoardAddr = 0;
+    this.lastMsgBoardCount = 0;
+    this.bootMenuExitVTime = 0;
 
     this.pic.reset();
     this.pit.reset();
     this.cmos.reset();
     this.ps2.reset();
     this.pci.reset();
+    this.dma.reset();
+    this.fdc.reset();
     const savedInst = this.cpu.totalInstructions;
+    const savedCycles = this.cpu.cycles;
     const savedHits = this.cpu.basicBlockHits;
     const savedBBInst = this.cpu.basicBlockInstrs;
     const savedDecoded = this.cpu.basicBlockDecoded;
     this.vga.reset();
     this.cpu.reset();
     this.cpu.totalInstructions = savedInst;
+    this.cpu.cycles = savedCycles;
     this.cpu.basicBlockHits = savedHits;
     this.cpu.basicBlockInstrs = savedBBInst;
     this.cpu.basicBlockDecoded = savedDecoded;
+    this.pit.startCycle.fill(this.cpu.cycles);
+    this.pit.nextIrq0Tick = this.pit.cyclesToPitTicks(this.cpu.cycles) + this.pit.reload[0];
+    this.pit.updateSchedule();
 
     this.setupBIOS();
     if (this.floppyImage) {
@@ -3041,6 +3715,68 @@ class HummingbirdPC {
     this.reset();
   }
 
+  get virtualCycles() {
+    return this.cpu.cycles;
+  }
+
+  get virtualTimeSeconds() {
+    return this.cpu.cycles / this.cpuFreqHz;
+  }
+
+  getNextDeadlineCycle() {
+    return this.pit.nextIrq0Cycle;
+  }
+
+  // Check if an 8.3 filename (e.g. "SHELL", "CALC", "TINYPAD") exists on the FAT12 floppy image
+  hasFloppyFile(name83) {
+    if (!this.floppyImage || this.floppyImage.length < 0x4200) return false;
+    const img = this.floppyImage;
+    const target = name83.toUpperCase().trim().split('.');
+    const base = (target[0] || '').padEnd(8, ' ').slice(0, 8);
+    const ext = (target[1] || '').padEnd(3, ' ').slice(0, 3);
+    const full11 = base + ext;
+    // Check FAT12 root directory (typically sectors 19..32 = 0x2600..0x4200) plus whole image for subdirs
+    for (let off = 0x2600; off + 32 <= img.length; off += 32) {
+      const b0 = img[off];
+      if (b0 === 0x00 || b0 === 0xE5) continue;
+      const attr = img[off + 11];
+      if (attr === 0x0F || (attr & 0x08)) continue;
+      let match = true;
+      for (let i = 0; i < 11; i++) {
+        if (img[off + i] !== full11.charCodeAt(i)) {
+          match = false;
+          break;
+        }
+      }
+      if (match) return true;
+    }
+    return false;
+  }
+
+  // Observational detector for KolibriOS kernel message board (msg_board_data + msg_board_count at +0x10000)
+  findKolibriMsgBoardAddr() {
+    const ram = this.ram;
+    const limit = Math.min(ram.length - 0x10004, 0x00100000);
+    // Look for "K : " (0x4B, 0x20, 0x3A, 0x20) at start of msg_board_data with valid count at +0x10000
+    for (let a = 0x30000; a < limit; a += 2) {
+      if (ram[a] === 0x4B && ram[a + 1] === 0x20 && ram[a + 2] === 0x3A && ram[a + 3] === 0x20) {
+        const count = this.physRead32((a + 0x10000) >>> 0);
+        if (count >= 4 && count <= 65536 && ram[a + count] === 0) {
+          return a;
+        }
+      }
+    }
+    return 0;
+  }
+
+  get kolibriMsgBoardAddr() {
+    if (this._msgBoardAddr === 0) {
+      const found = this.findKolibriMsgBoardAddr();
+      if (found) this._msgBoardAddr = found;
+    }
+    return this._msgBoardAddr || 0;
+  }
+
   recordMilestone(id, name, details = '') {
     if (this.milestoneMap.has(id)) return;
     const entry = {
@@ -3048,6 +3784,8 @@ class HummingbirdPC {
       name,
       details,
       instructions: this.cpu.totalInstructions,
+      cycles: this.cpu.cycles,
+      virtualTimeSec: this.cpu.cycles / this.cpuFreqHz,
       eip: this.cpu.eip >>> 0,
       cs: this.cpu.segs[SEG_CS]
     };
@@ -3063,11 +3801,22 @@ class HummingbirdPC {
     this.recordMilestone('shutdown_restart', '7. Restart or shutdown from menu', 'System reboot triggered');
     // Reset CPU and reload boot sector
     this.a20Enabled = false;
+    this._mouseAddr = 0;
+    this._msgBoardAddr = 0;
     this.pic.reset();
     this.pit.reset();
     this.ps2.reset();
+    this.dma.reset();
+    this.fdc.reset();
+    const savedInst = this.cpu.totalInstructions;
+    const savedCycles = this.cpu.cycles;
     this.vga.reset();
     this.cpu.reset();
+    this.cpu.totalInstructions = savedInst;
+    this.cpu.cycles = savedCycles;
+    this.pit.startCycle.fill(this.cpu.cycles);
+    this.pit.nextIrq0Tick = this.pit.cyclesToPitTicks(this.cpu.cycles) + this.pit.reload[0];
+    this.pit.updateSchedule();
     this.setupBIOS();
     if (this.floppyImage) {
       this.bootFromFloppy();
@@ -3284,6 +4033,12 @@ class HummingbirdPC {
         return;
       }
 
+      case 0x0E: { // IRQ6 Floppy Disk Controller ISR
+        this.ram[0x043E] |= 0x80; // Set BDA floppy interrupt flag (bit 7)
+        this.pic.master.writeCommand(0x20); // EOI
+        return;
+      }
+
       case 0x10: { // Video & VBE BIOS
         this.handleBiosInt10(ax, ah, al, bx, cx, dx, edi);
         return;
@@ -3439,6 +4194,9 @@ class HummingbirdPC {
 
     if (ax === 0x4F02) {
       // VBE Set Video Mode BX
+      if (this.milestoneMap.has('boot_menu') && !this.bootMenuExitVTime) {
+        this.bootMenuExitVTime = this.virtualTimeSeconds;
+      }
       const ok = this.vga.setMode(bx);
       cpu.setReg16(REG_EAX, ok ? 0x004F : 0x014F);
       this.setStackCF(ok ? 0 : 1);
@@ -3949,19 +4707,22 @@ class HummingbirdPC {
 
   // Check protected-mode milestones (Desktop drawn, Mouse moved, Apps running, Kernel msg board)
   checkRuntimeMilestones() {
-    if (this.milestoneMap.has("protected_mode_paging") && this.ram[0x4C86A] === 0x4B) {
-      const count = this.physRead32(0x5C86A);
-      const prev = this.lastMsgBoardCount || 0;
-      if (count > prev && count <= 65536) {
-        let added = "";
-        for (let i = prev; i < count; i++) {
-          const ch = this.ram[0x4C86A + i];
-          if (ch !== 0) added += String.fromCharCode(ch);
-        }
-        this.lastMsgBoardCount = count;
-        if (added) {
-          this.debugConsoleOutput += added;
-          if (this.onDebugChar) this.onDebugChar(added);
+    if (this.milestoneMap.has("protected_mode_paging")) {
+      const mbAddr = this.kolibriMsgBoardAddr;
+      if (mbAddr !== 0) {
+        const count = this.physRead32((mbAddr + 0x10000) >>> 0);
+        const prev = this.lastMsgBoardCount || 0;
+        if (count > prev && count <= 65536) {
+          let added = "";
+          for (let i = prev; i < count; i++) {
+            const ch = this.ram[mbAddr + i];
+            if (ch !== 0) added += String.fromCharCode(ch);
+          }
+          this.lastMsgBoardCount = count;
+          if (added) {
+            this.debugConsoleOutput += added;
+            if (this.onDebugChar) this.onDebugChar(added);
+          }
         }
       }
     }
@@ -3994,8 +4755,8 @@ class HummingbirdPC {
             }
           }
           if (iconPixels > 40) {
-            // Record initial mouse position (MOUSE_X at phys 0x4C82A, MOUSE_Y at phys 0x4C82C)
-            const ma = this._mouseAddr !== undefined ? this._mouseAddr : 0x4C82A;
+            // Record initial mouse position (derived observationally from msg_board_data - 0x40 or probed _mouseAddr)
+            const ma = this._mouseAddr !== 0 ? this._mouseAddr : (this.kolibriMsgBoardAddr ? (this.kolibriMsgBoardAddr - 0x40) : 0x4C82A);
             const mx = this.ramView.getUint16(ma, true);
             const my = this.ramView.getUint16(ma + 2, true);
             this.initialMousePos = { x: mx, y: my };
@@ -4007,7 +4768,7 @@ class HummingbirdPC {
 
     // Check Milestone 5 (Mouse moves the pointer)
     if (this.milestoneMap.has('desktop_drawn') && !this.milestoneMap.has('mouse_moved') && this.initialMousePos) {
-      const ma = this._mouseAddr !== undefined ? this._mouseAddr : 0x4C82A;
+      const ma = this._mouseAddr !== 0 ? this._mouseAddr : (this.kolibriMsgBoardAddr ? (this.kolibriMsgBoardAddr - 0x40) : 0x4C82A);
       const mx = this.ramView.getUint16(ma, true);
       const my = this.ramView.getUint16(ma + 2, true);
       if (mx !== this.initialMousePos.x || my !== this.initialMousePos.y) {
@@ -4219,17 +4980,31 @@ class HummingbirdPC {
       case 0x42: return this.pit.readChannel(2);
       case 0x43: return 0x00;
 
+      // 8237 DMA Controller (0x00..0x0F) & Page Registers (0x81..0x8F)
+      case 0x00: case 0x01: case 0x02: case 0x03:
+      case 0x04: case 0x05: case 0x06: case 0x07:
+      case 0x08: case 0x09: case 0x0A: case 0x0B:
+      case 0x0C: case 0x0D: case 0x0E: case 0x0F:
+      case 0x81: case 0x82: case 0x83: case 0x87:
+        return this.dma.portRead(port);
+
       // 8042 PS/2 Controller & Port 0x61
       case 0x60: return this.ps2.readData();
-      case 0x61: return this.pit.readPort61(this.cpu.totalInstructions);
+      case 0x61: return this.pit.readPort61(this.cpu.cycles);
       case 0x64: return this.ps2.readStatus();
 
       // CMOS / RTC
       case 0x70: return this.cmos.index;
       case 0x71: return this.cmos.readData();
 
-      // Port 0x80 (POST diagnostic delay)
-      case 0x80: return 0x00;
+      // Port 0x80..0x8F (POST diagnostic delay & unused DMA pages)
+      case 0x80: case 0x84: case 0x85: case 0x86:
+      case 0x88: case 0x89: case 0x8A: case 0x8B:
+      case 0x8C: case 0x8D: case 0x8E: case 0x8F:
+      case 0xC0: case 0xC2: case 0xC4: case 0xC6: case 0xC8: case 0xCA:
+      case 0xCC: case 0xCE: case 0xD0: case 0xD2: case 0xD4: case 0xD6:
+      case 0xD8: case 0xDA: case 0xDC: case 0xDE:
+        return 0x00;
 
       // Port 0x92 (Fast A20 / System Control Port A)
       case 0x92: return this.a20Enabled ? 0x02 : 0x00;
@@ -4261,11 +5036,15 @@ class HummingbirdPC {
       case 0x3DA:
         return this.vga.portRead(port, size);
 
-      // Floppy Digital Output / Status (return 0x80 ready or 0xFF absent cleanly)
-      case 0x3F2: return 0x00;
-      case 0x3F4: return 0x80;
-      case 0x3F5: return 0x00;
-      case 0x3F7: return 0x00;
+      // 82077AA Floppy Disk Controller (0x3F0..0x3F5, 0x3F7)
+      case 0x3F0:
+      case 0x3F1:
+      case 0x3F2:
+      case 0x3F3:
+      case 0x3F4:
+      case 0x3F5:
+      case 0x3F7:
+        return this.fdc.portRead(port);
 
       // Serial COM1..COM4 (LSR = 0x60 transmitter empty so debug serial never hangs)
       case 0x3F8: case 0x3F9: case 0x3FA: case 0x3FB: case 0x3FC: case 0x3FE:
@@ -4275,10 +5054,21 @@ class HummingbirdPC {
       case 0x2FD:
         return 0x60;
 
-      // Legacy IDE ports (absent -> return 0xFF or 0x00 status)
+      // Legacy IDE ports (absent -> return 0x00 status)
       case 0x1F0: case 0x1F1: case 0x1F2: case 0x1F3: case 0x1F4: case 0x1F5: case 0x1F6: case 0x1F7: case 0x3F6:
       case 0x170: case 0x171: case 0x172: case 0x173: case 0x174: case 0x175: case 0x176: case 0x177: case 0x376:
         return 0x00;
+
+      // Legacy ISA Sound Blaster DSP probe ports (0x210..0x28F -> return 0xFF absent)
+      case 0x216: case 0x21A: case 0x21C: case 0x21E:
+      case 0x226: case 0x22A: case 0x22C: case 0x22E:
+      case 0x236: case 0x23A: case 0x23C: case 0x23E:
+      case 0x246: case 0x24A: case 0x24C: case 0x24E:
+      case 0x256: case 0x25A: case 0x25C: case 0x25E:
+      case 0x266: case 0x26A: case 0x26C: case 0x26E:
+      case 0x276: case 0x27A: case 0x27C: case 0x27E:
+      case 0x286: case 0x28A: case 0x28C: case 0x28E:
+        return 0xFF;
 
       default:
         this.recordUnhandledPort('IN', port, size, 0);
@@ -4316,14 +5106,28 @@ class HummingbirdPC {
       case 0x42: this.pit.writeChannel(2, val); return;
       case 0x43: this.pit.writeControl(val); return;
 
+      case 0x00: case 0x01: case 0x02: case 0x03:
+      case 0x04: case 0x05: case 0x06: case 0x07:
+      case 0x08: case 0x09: case 0x0A: case 0x0B:
+      case 0x0C: case 0x0D: case 0x0E: case 0x0F:
+      case 0x81: case 0x82: case 0x83: case 0x87:
+        this.dma.portWrite(port, val);
+        return;
+
       case 0x60: this.ps2.writeData(val); return;
-      case 0x61: this.pit.writePort61(val); return;
+      case 0x61: this.pit.writePort61(val, this.cpu.cycles); return;
       case 0x64: this.ps2.writeCommand(val); return;
 
       case 0x70: this.cmos.writeIndex(val); return;
       case 0x71: this.cmos.writeData(val); return;
 
-      case 0x80: return; // I/O delay port
+      case 0x80: case 0x84: case 0x85: case 0x86:
+      case 0x88: case 0x89: case 0x8A: case 0x8B:
+      case 0x8C: case 0x8D: case 0x8E: case 0x8F:
+      case 0xC0: case 0xC2: case 0xC4: case 0xC6: case 0xC8: case 0xCA:
+      case 0xCC: case 0xCE: case 0xD0: case 0xD2: case 0xD4: case 0xD6:
+      case 0xD8: case 0xDA: case 0xDC: case 0xDE:
+        return; // I/O delay & slave DMA ports
 
       case 0x92:
         this.a20Enabled = (val & 0x02) !== 0;
@@ -4358,14 +5162,20 @@ class HummingbirdPC {
         this.vga.portWrite(port, val, size);
         return;
 
+      case 0x3F0:
+      case 0x3F1:
       case 0x3F2:
+      case 0x3F3:
       case 0x3F4:
       case 0x3F5:
       case 0x3F7:
+        this.fdc.portWrite(port, val);
+        return;
       case 0x3F8: case 0x3F9: case 0x3FA: case 0x3FB: case 0x3FC: case 0x3FD: case 0x3FE:
       case 0x2F8: case 0x2F9: case 0x2FA: case 0x2FB: case 0x2FC: case 0x2FD: case 0x2FE:
       case 0x1F0: case 0x1F1: case 0x1F2: case 0x1F3: case 0x1F4: case 0x1F5: case 0x1F6: case 0x1F7: case 0x3F6:
       case 0x170: case 0x171: case 0x172: case 0x173: case 0x174: case 0x175: case 0x176: case 0x177: case 0x376:
+      case 0x216: case 0x226: case 0x236: case 0x246: case 0x256: case 0x266: case 0x276: case 0x286:
         return;
 
       default:
@@ -4384,7 +5194,7 @@ class HummingbirdPC {
   // High-level PS/2 input helpers for deterministic testing & automation
   drainPS2() {
     let guard = 0;
-    while ((this.ps2.queue.length > 0 || this.ps2.outBufFull) && guard < 100) {
+    while ((this.ps2.queue.length > 0 || this.ps2.hasOut) && guard < 100) {
       this.cpu.runSteps(40000);
       guard++;
     }
@@ -4411,7 +5221,7 @@ class HummingbirdPC {
   }
 
   get kolibriMouseAddr() {
-    if (this._mouseAddr === undefined) this._mouseAddr = this.findKolibriMouseVars();
+    if (this._mouseAddr === 0) this._mouseAddr = this.findKolibriMouseVars();
     return this._mouseAddr;
   }
 
@@ -4471,6 +5281,23 @@ class HummingbirdPC {
 
 const CPU_FAULT_SIGNAL = { isCpuFault: true };
 
+class BlockOp {
+  constructor(type, startEIP, nextEIP, mod, reg, rm, base, index, scale, disp, imm, aluOp) {
+    this.type = type | 0;
+    this.startEIP = startEIP | 0;
+    this.nextEIP = nextEIP | 0;
+    this.mod = mod | 0;
+    this.reg = reg | 0;
+    this.rm = rm | 0;
+    this.base = base | 0;
+    this.index = index | 0;
+    this.scale = scale | 0;
+    this.disp = disp | 0;
+    this.imm = imm | 0;
+    this.aluOp = aluOp | 0;
+  }
+}
+
 class X86CPU {
   constructor(pc) {
     this.pc = pc;
@@ -4507,6 +5334,7 @@ class X86CPU {
     this.basicBlockDecoded = 0;
     this.lastEAOffset = 0;
     this.lastEASeg = 0;
+    this._modrm = { mod: 0, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, nextP: 0 };
 
     this.fpu = new X87FPU(this);
     this.tmpBuf = new ArrayBuffer(8);
@@ -4557,6 +5385,7 @@ class X86CPU {
     }
 
     this.totalInstructions = 0;
+    this.cycles = 0;
     this.startEIP = 0;
     this.startESP = 0;
     this.inRepInstruction = false;
@@ -6290,6 +7119,61 @@ class X86CPU {
     this.inRepInstruction = true;
     try {
       let cnt = isAddr32 ? (this.regs[REG_ECX] >>> 0) : (this.regs[REG_ECX] & 0xFFFF);
+      if (cnt === 0) return;
+
+      if (op === "STOS" && isAddr32) {
+        let di = this.regs[REG_EDI] >>> 0;
+        if (opSize === 32) {
+          const val = this.regs[REG_EAX];
+          while (cnt !== 0) {
+            this.writeMem32((esBase + di) >>> 0, val);
+            di = (di + dir) >>> 0;
+            this.regs[REG_EDI] = di | 0;
+            cnt = (cnt - 1) >>> 0;
+            this.regs[REG_ECX] = cnt | 0;
+          }
+          return;
+        } else if (opSize === 8) {
+          const val = this.regs[REG_EAX] & 0xFF;
+          while (cnt !== 0) {
+            this.writeMem8((esBase + di) >>> 0, val);
+            di = (di + dir) >>> 0;
+            this.regs[REG_EDI] = di | 0;
+            cnt = (cnt - 1) >>> 0;
+            this.regs[REG_ECX] = cnt | 0;
+          }
+          return;
+        }
+      } else if (op === "MOVS" && isAddr32) {
+        let si = this.regs[REG_ESI] >>> 0;
+        let di = this.regs[REG_EDI] >>> 0;
+        if (opSize === 32) {
+          while (cnt !== 0) {
+            const val = this.readMem32((srcBase + si) >>> 0);
+            this.writeMem32((esBase + di) >>> 0, val);
+            si = (si + dir) >>> 0;
+            di = (di + dir) >>> 0;
+            this.regs[REG_ESI] = si | 0;
+            this.regs[REG_EDI] = di | 0;
+            cnt = (cnt - 1) >>> 0;
+            this.regs[REG_ECX] = cnt | 0;
+          }
+          return;
+        } else if (opSize === 8) {
+          while (cnt !== 0) {
+            const val = this.readMem8((srcBase + si) >>> 0);
+            this.writeMem8((esBase + di) >>> 0, val);
+            si = (si + dir) >>> 0;
+            di = (di + dir) >>> 0;
+            this.regs[REG_ESI] = si | 0;
+            this.regs[REG_EDI] = di | 0;
+            cnt = (cnt - 1) >>> 0;
+            this.regs[REG_ECX] = cnt | 0;
+          }
+          return;
+        }
+      }
+
       while (cnt !== 0) {
         const si = isAddr32 ? (this.regs[REG_ESI] >>> 0) : (this.regs[REG_ESI] & 0xFFFF);
         const di = isAddr32 ? (this.regs[REG_EDI] >>> 0) : (this.regs[REG_EDI] & 0xFFFF);
@@ -6611,7 +7495,7 @@ class X86CPU {
       }
 
       case 0x31: { // RDTSC
-        const tsc = this.totalInstructions * 20;
+        const tsc = this.cycles;
         this.regs[REG_EAX] = tsc | 0;
         this.regs[REG_EDX] = Math.floor(tsc / 4294967296) | 0;
         return;
@@ -8025,8 +8909,17 @@ class X86CPU {
     const mod = (modrm >>> 6) & 3;
     const reg = (modrm >>> 3) & 7;
     const rm = modrm & 7;
+    const out = this._modrm;
+    out.mod = mod;
+    out.reg = reg;
+    out.rm = rm;
     if (mod === 3) {
-      return { mod: 3, reg, rm, base: -1, index: -1, scale: 0, disp: 0, nextP: p };
+      out.base = -1;
+      out.index = -1;
+      out.scale = 0;
+      out.disp = 0;
+      out.nextP = p;
+      return out;
     }
     let base = -1, index = -1, scale = 0, disp = 0;
     if (rm === 4) {
@@ -8059,17 +8952,22 @@ class X86CPU {
       disp = (disp + d32) | 0;
       p += 4;
     }
-    return { mod, reg, rm, base, index, scale, disp, nextP: p };
+    out.base = base;
+    out.index = index;
+    out.scale = scale;
+    out.disp = disp;
+    out.nextP = p;
+    return out;
   }
 
-  decodeBasicBlock(physStart, linStart, page, version) {
+  decodeBasicBlock(physStart, linStart, page, version, expectedTlb = -1) {
     const ram = this.ram;
     const maxP = ((physStart & 0xFFFFF000) + 0x1000) >>> 0;
     const ops = [];
     let p = physStart;
     let curEIP = linStart | 0;
 
-    while (ops.length < 16 && p < maxP) {
+    while (ops.length < 32 && p < maxP) {
       const startP = p;
       const instStartEIP = curEIP;
       const opcode = ram[p++];
@@ -8083,168 +8981,259 @@ class X86CPU {
         if (!m) break;
         p = m.nextP;
         const type = (dir === 0) ? 3 : (dir === 1) ? 1 : (dir === 2) ? 4 : 2;
-        op = { type, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm: 0, aluOp };
+        op = new BlockOp(type, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, aluOp);
       } else if ((opcode & 0xC6) === 0x04 && opcode < 0x40) {
         const aluOp = (opcode >>> 3) & 7;
         if (opcode & 1) {
           if (p + 4 > maxP) break;
           const imm = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) >>> 0;
           p += 4;
-          op = { type: 5, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm, aluOp };
+          op = new BlockOp(5, instStartEIP, (instStartEIP + (p - startP)) | 0, 3, 0, 0, -1, -1, 0, 0, imm, aluOp);
         } else {
           if (p >= maxP) break;
           const imm = ram[p++];
-          op = { type: 6, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm, aluOp };
+          op = new BlockOp(6, instStartEIP, (instStartEIP + (p - startP)) | 0, 3, 0, 0, -1, -1, 0, 0, imm, aluOp);
         }
       } else if (opcode >= 0x40 && opcode <= 0x47) {
-        op = { type: 7, startEIP: instStartEIP, nextEIP: (instStartEIP + 1) | 0, mod: 3, reg: opcode & 7, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm: 0, aluOp: 0 };
+        op = new BlockOp(7, instStartEIP, (instStartEIP + 1) | 0, 3, opcode & 7, 0, -1, -1, 0, 0, 0, 0);
       } else if (opcode >= 0x48 && opcode <= 0x4F) {
-        op = { type: 8, startEIP: instStartEIP, nextEIP: (instStartEIP + 1) | 0, mod: 3, reg: opcode & 7, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm: 0, aluOp: 0 };
+        op = new BlockOp(8, instStartEIP, (instStartEIP + 1) | 0, 3, opcode & 7, 0, -1, -1, 0, 0, 0, 0);
       } else if (opcode >= 0x50 && opcode <= 0x57) {
-        op = { type: 9, startEIP: instStartEIP, nextEIP: (instStartEIP + 1) | 0, mod: 3, reg: opcode & 7, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm: 0, aluOp: 0 };
+        op = new BlockOp(9, instStartEIP, (instStartEIP + 1) | 0, 3, opcode & 7, 0, -1, -1, 0, 0, 0, 0);
       } else if (opcode >= 0x58 && opcode <= 0x5F) {
-        op = { type: 10, startEIP: instStartEIP, nextEIP: (instStartEIP + 1) | 0, mod: 3, reg: opcode & 7, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm: 0, aluOp: 0 };
+        op = new BlockOp(10, instStartEIP, (instStartEIP + 1) | 0, 3, opcode & 7, 0, -1, -1, 0, 0, 0, 0);
       } else if (opcode === 0x68) {
         if (p + 4 > maxP) break;
         const imm = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) >>> 0;
         p += 4;
-        op = { type: 11, startEIP: instStartEIP, nextEIP: (instStartEIP + 5) | 0, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm, aluOp: 0 };
+        op = new BlockOp(11, instStartEIP, (instStartEIP + 5) | 0, 3, 0, 0, -1, -1, 0, 0, imm, 0);
       } else if (opcode === 0x6A) {
         if (p >= maxP) break;
         const imm = ((ram[p++] << 24) >> 24) >>> 0;
-        op = { type: 11, startEIP: instStartEIP, nextEIP: (instStartEIP + 2) | 0, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm, aluOp: 0 };
+        op = new BlockOp(11, instStartEIP, (instStartEIP + 2) | 0, 3, 0, 0, -1, -1, 0, 0, imm, 0);
+      } else if (opcode === 0x69 || opcode === 0x6B) {
+        const m = this.decodeModRM32(p, maxP);
+        if (!m) break;
+        p = m.nextP;
+        let imm;
+        if (opcode === 0x69) {
+          if (p + 4 > maxP) break;
+          imm = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) | 0;
+          p += 4;
+        } else {
+          if (p >= maxP) break;
+          imm = (ram[p++] << 24) >> 24;
+        }
+        op = new BlockOp(67, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, imm, 0);
       } else if (opcode >= 0x70 && opcode <= 0x7F) {
         if (p >= maxP) break;
         const disp = (ram[p++] << 24) >> 24;
         const nextEIP = (instStartEIP + 2) | 0;
-        op = { type: 12, startEIP: instStartEIP, nextEIP, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm: (nextEIP + disp) | 0, aluOp: opcode & 0x0F };
+        op = new BlockOp(12, instStartEIP, nextEIP, 3, 0, 0, -1, -1, 0, 0, (nextEIP + disp) | 0, opcode & 0x0F);
         isTerm = true;
       } else if (opcode === 0x80 || opcode === 0x82) {
         const m = this.decodeModRM32(p, maxP);
         if (!m || m.nextP >= maxP) break;
         p = m.nextP;
         const imm = ram[p++];
-        op = { type: 14, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm, aluOp: m.reg };
+        op = new BlockOp(14, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, imm, m.reg);
       } else if (opcode === 0x81) {
         const m = this.decodeModRM32(p, maxP);
         if (!m || m.nextP + 4 > maxP) break;
         p = m.nextP;
         const imm = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) >>> 0;
         p += 4;
-        op = { type: 13, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm, aluOp: m.reg };
+        op = new BlockOp(13, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, imm, m.reg);
       } else if (opcode === 0x83) {
         const m = this.decodeModRM32(p, maxP);
         if (!m || m.nextP >= maxP) break;
         p = m.nextP;
         const imm = ((ram[p++] << 24) >> 24) >>> 0;
-        op = { type: 13, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm, aluOp: m.reg };
+        op = new BlockOp(13, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, imm, m.reg);
       } else if (opcode === 0x84 || opcode === 0x85) {
         const m = this.decodeModRM32(p, maxP);
         if (!m) break;
         p = m.nextP;
-        op = { type: opcode === 0x85 ? 15 : 16, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm: 0, aluOp: 0 };
+        op = new BlockOp(opcode === 0x85 ? 15 : 16, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, 0);
+      } else if (opcode === 0x87) {
+        const m = this.decodeModRM32(p, maxP);
+        if (!m) break;
+        p = m.nextP;
+        op = new BlockOp(68, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, 0);
       } else if (opcode >= 0x88 && opcode <= 0x8B) {
         const m = this.decodeModRM32(p, maxP);
         if (!m) break;
         p = m.nextP;
         const type = (opcode === 0x89) ? 17 : (opcode === 0x8B) ? 18 : (opcode === 0x88) ? 19 : 20;
-        op = { type, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm: 0, aluOp: 0 };
+        op = new BlockOp(type, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, 0);
       } else if (opcode === 0x8D) {
         const m = this.decodeModRM32(p, maxP);
         if (!m || m.mod === 3) break;
         p = m.nextP;
-        op = { type: 21, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm: 0, aluOp: 0 };
+        op = new BlockOp(21, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, 0);
+      } else if (opcode === 0x90) {
+        op = new BlockOp(34, instStartEIP, (instStartEIP + 1) | 0, 3, 0, 0, -1, -1, 0, 0, 0, 0);
+      } else if (opcode >= 0x91 && opcode <= 0x97) {
+        op = new BlockOp(35, instStartEIP, (instStartEIP + 1) | 0, 3, opcode & 7, 0, -1, -1, 0, 0, 0, 0);
+      } else if (opcode === 0x98) {
+        op = new BlockOp(51, instStartEIP, (instStartEIP + 1) | 0, 3, 0, 0, -1, -1, 0, 0, 0, 0);
+      } else if (opcode === 0x99) {
+        op = new BlockOp(52, instStartEIP, (instStartEIP + 1) | 0, 3, 0, 0, -1, -1, 0, 0, 0, 0);
+      } else if (opcode === 0x9E) {
+        op = new BlockOp(47, instStartEIP, (instStartEIP + 1) | 0, 3, 0, 0, -1, -1, 0, 0, 0, 0);
+      } else if (opcode === 0x9F) {
+        op = new BlockOp(48, instStartEIP, (instStartEIP + 1) | 0, 3, 0, 0, -1, -1, 0, 0, 0, 0);
+      } else if (opcode >= 0xA0 && opcode <= 0xA3) {
+        if (p + 4 > maxP) break;
+        const imm = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) | 0;
+        p += 4;
+        const type = 53 + (opcode - 0xA0);
+        op = new BlockOp(type, instStartEIP, (instStartEIP + 5) | 0, 3, 0, 0, -1, -1, 0, 0, imm, 0);
+      } else if (opcode === 0xA4 || opcode === 0xA5 || opcode === 0xAA || opcode === 0xAB || opcode === 0xAC || opcode === 0xAD) {
+        op = new BlockOp(75, instStartEIP, (instStartEIP + 1) | 0, 3, 0, 0, -1, -1, 0, 0, 0, opcode);
+      } else if (opcode === 0xA8) {
+        if (p >= maxP) break;
+        const imm = ram[p++];
+        op = new BlockOp(36, instStartEIP, (instStartEIP + 2) | 0, 3, 0, 0, -1, -1, 0, 0, imm, 0);
+      } else if (opcode === 0xA9) {
+        if (p + 4 > maxP) break;
+        const imm = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) | 0;
+        p += 4;
+        op = new BlockOp(37, instStartEIP, (instStartEIP + 5) | 0, 3, 0, 0, -1, -1, 0, 0, imm, 0);
       } else if (opcode >= 0xB0 && opcode <= 0xB7) {
         if (p >= maxP) break;
         const imm = ram[p++];
-        op = { type: 23, startEIP: instStartEIP, nextEIP: (instStartEIP + 2) | 0, mod: 3, reg: opcode & 7, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm, aluOp: 0 };
+        op = new BlockOp(23, instStartEIP, (instStartEIP + 2) | 0, 3, opcode & 7, 0, -1, -1, 0, 0, imm, 0);
       } else if (opcode >= 0xB8 && opcode <= 0xBF) {
         if (p + 4 > maxP) break;
         const imm = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) | 0;
         p += 4;
-        op = { type: 22, startEIP: instStartEIP, nextEIP: (instStartEIP + 5) | 0, mod: 3, reg: opcode & 7, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm, aluOp: 0 };
+        op = new BlockOp(22, instStartEIP, (instStartEIP + 5) | 0, 3, opcode & 7, 0, -1, -1, 0, 0, imm, 0);
+      } else if (opcode === 0xC0) {
+        const m = this.decodeModRM32(p, maxP);
+        if (!m || m.reg === 6 || m.nextP >= maxP) break;
+        p = m.nextP;
+        const imm = ram[p++];
+        op = new BlockOp(45, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, imm, m.reg);
       } else if (opcode === 0xC1) {
         const m = this.decodeModRM32(p, maxP);
         if (!m || m.reg === 6 || m.nextP >= maxP) break;
         p = m.nextP;
         const imm = ram[p++];
-        op = { type: 24, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm, aluOp: m.reg };
+        op = new BlockOp(24, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, imm, m.reg);
+      } else if (opcode === 0xD0) {
+        const m = this.decodeModRM32(p, maxP);
+        if (!m || m.reg === 6) break;
+        p = m.nextP;
+        op = new BlockOp(45, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 1, m.reg);
       } else if (opcode === 0xD1) {
         const m = this.decodeModRM32(p, maxP);
         if (!m || m.reg === 6) break;
         p = m.nextP;
-        op = { type: 24, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm: 1, aluOp: m.reg };
+        op = new BlockOp(24, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 1, m.reg);
+      } else if (opcode === 0xD2) {
+        const m = this.decodeModRM32(p, maxP);
+        if (!m || m.reg === 6) break;
+        p = m.nextP;
+        op = new BlockOp(46, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, m.reg);
       } else if (opcode === 0xD3) {
         const m = this.decodeModRM32(p, maxP);
         if (!m || m.reg === 6) break;
         p = m.nextP;
-        op = { type: 25, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm: 0, aluOp: m.reg };
+        op = new BlockOp(25, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, m.reg);
       } else if (opcode === 0xC6) {
         const m = this.decodeModRM32(p, maxP);
         if (!m || m.reg !== 0 || m.nextP >= maxP) break;
         p = m.nextP;
         const imm = ram[p++];
-        op = { type: 27, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: 0, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm, aluOp: 0 };
+        op = new BlockOp(27, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, 0, m.rm, m.base, m.index, m.scale, m.disp, imm, 0);
       } else if (opcode === 0xC7) {
         const m = this.decodeModRM32(p, maxP);
         if (!m || m.reg !== 0 || m.nextP + 4 > maxP) break;
         p = m.nextP;
         const imm = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) | 0;
         p += 4;
-        op = { type: 26, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: 0, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm, aluOp: 0 };
+        op = new BlockOp(26, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, 0, m.rm, m.base, m.index, m.scale, m.disp, imm, 0);
+      } else if (opcode === 0xC9) {
+        op = new BlockOp(50, instStartEIP, (instStartEIP + 1) | 0, 3, 0, 0, -1, -1, 0, 0, 0, 0);
       } else if (opcode === 0xC3) {
-        op = { type: 30, startEIP: instStartEIP, nextEIP: (instStartEIP + 1) | 0, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm: 0, aluOp: 0 };
+        op = new BlockOp(30, instStartEIP, (instStartEIP + 1) | 0, 3, 0, 0, -1, -1, 0, 0, 0, 0);
         isTerm = true;
       } else if (opcode === 0xC2) {
         if (p + 2 > maxP) break;
         const imm = ram[p] | (ram[p + 1] << 8);
         p += 2;
-        op = { type: 30, startEIP: instStartEIP, nextEIP: (instStartEIP + 3) | 0, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm, aluOp: 0 };
+        op = new BlockOp(30, instStartEIP, (instStartEIP + 3) | 0, 3, 0, 0, -1, -1, 0, 0, imm, 0);
         isTerm = true;
+      } else if (opcode >= 0xE0 && opcode <= 0xE2) {
+        if (p >= maxP) break;
+        const disp = (ram[p++] << 24) >> 24;
+        const nextEIP = (instStartEIP + 2) | 0;
+        op = new BlockOp(60, instStartEIP, nextEIP, 3, 0, 0, -1, -1, 0, 0, (nextEIP + disp) | 0, opcode);
+        isTerm = true;
+      } else if (opcode === 0xE3) {
+        if (p >= maxP) break;
+        const disp = (ram[p++] << 24) >> 24;
+        const nextEIP = (instStartEIP + 2) | 0;
+        op = new BlockOp(61, instStartEIP, nextEIP, 3, 0, 0, -1, -1, 0, 0, (nextEIP + disp) | 0, 0);
+        isTerm = true;
+      } else if (opcode === 0xE4) {
+        if (p >= maxP) break;
+        const port = ram[p++];
+        if (port !== 0x61 || this.cpl !== 0) break;
+        op = new BlockOp(76, instStartEIP, (instStartEIP + 2) | 0, 3, 0, 0, -1, -1, 0, 0, 0x61, 0);
       } else if (opcode === 0xE8 || opcode === 0xE9) {
         if (p + 4 > maxP) break;
         const disp = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) | 0;
         p += 4;
         const nextEIP = (instStartEIP + 5) | 0;
-        op = { type: opcode === 0xE8 ? 29 : 28, startEIP: instStartEIP, nextEIP, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm: (nextEIP + disp) | 0, aluOp: 0 };
+        op = new BlockOp(opcode === 0xE8 ? 29 : 28, instStartEIP, nextEIP, 3, 0, 0, -1, -1, 0, 0, (nextEIP + disp) | 0, 0);
         isTerm = true;
       } else if (opcode === 0xEB) {
         if (p >= maxP) break;
         const disp = (ram[p++] << 24) >> 24;
         const nextEIP = (instStartEIP + 2) | 0;
-        op = { type: 28, startEIP: instStartEIP, nextEIP, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm: (nextEIP + disp) | 0, aluOp: 0 };
+        op = new BlockOp(28, instStartEIP, nextEIP, 3, 0, 0, -1, -1, 0, 0, (nextEIP + disp) | 0, 0);
         isTerm = true;
-      } else if (opcode === 0x90) {
-        op = { type: 34, startEIP: instStartEIP, nextEIP: (instStartEIP + 1) | 0, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm: 0, aluOp: 0 };
-      } else if (opcode >= 0x91 && opcode <= 0x97) {
-        op = { type: 35, startEIP: instStartEIP, nextEIP: (instStartEIP + 1) | 0, mod: 3, reg: opcode & 7, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm: 0, aluOp: 0 };
-      } else if (opcode === 0xA8) {
-        if (p >= maxP) break;
-        const imm = ram[p++];
-        op = { type: 36, startEIP: instStartEIP, nextEIP: (instStartEIP + 2) | 0, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm, aluOp: 0 };
-      } else if (opcode === 0xA9) {
-        if (p + 4 > maxP) break;
-        const imm = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) | 0;
-        p += 4;
-        op = { type: 37, startEIP: instStartEIP, nextEIP: (instStartEIP + 5) | 0, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm, aluOp: 0 };
+      } else if (opcode === 0xF5 || opcode === 0xF8 || opcode === 0xF9 || opcode === 0xFC || opcode === 0xFD) {
+        op = new BlockOp(49, instStartEIP, (instStartEIP + 1) | 0, 3, 0, 0, -1, -1, 0, 0, 0, opcode);
       } else if (opcode === 0xF6) {
         const m = this.decodeModRM32(p, maxP);
-        if (!m || (m.reg !== 0 && m.reg !== 1) || m.nextP >= maxP) break;
+        if (!m) break;
         p = m.nextP;
-        const imm = ram[p++];
-        op = { type: 38, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: 0, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm, aluOp: 0 };
+        if (m.reg === 0 || m.reg === 1) {
+          if (p >= maxP) break;
+          const imm = ram[p++];
+          op = new BlockOp(38, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, 0, m.rm, m.base, m.index, m.scale, m.disp, imm, 0);
+        } else if (m.reg === 2 || m.reg === 3) {
+          op = new BlockOp(57, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, m.reg);
+        } else {
+          break;
+        }
       } else if (opcode === 0xF7) {
         const m = this.decodeModRM32(p, maxP);
-        if (!m || (m.reg !== 0 && m.reg !== 1) || m.nextP + 4 > maxP) break;
+        if (!m) break;
         p = m.nextP;
-        const imm = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) | 0;
-        p += 4;
-        op = { type: 39, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: 0, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm, aluOp: 0 };
+        if (m.reg === 0 || m.reg === 1) {
+          if (p + 4 > maxP) break;
+          const imm = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) | 0;
+          p += 4;
+          op = new BlockOp(39, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, 0, m.rm, m.base, m.index, m.scale, m.disp, imm, 0);
+        } else if (m.reg === 2 || m.reg === 3) {
+          op = new BlockOp(58, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, m.reg);
+        } else {
+          break;
+        }
+      } else if (opcode === 0xFE) {
+        const m = this.decodeModRM32(p, maxP);
+        if (!m || (m.reg !== 0 && m.reg !== 1)) break;
+        p = m.nextP;
+        op = new BlockOp(59, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, m.reg);
       } else if (opcode === 0xFF) {
         const m = this.decodeModRM32(p, maxP);
         if (!m || (m.reg !== 0 && m.reg !== 1 && m.reg !== 2 && m.reg !== 4 && m.reg !== 6)) break;
         p = m.nextP;
-        op = { type: 40, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm: 0, aluOp: m.reg };
+        op = new BlockOp(40, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, m.reg);
         if (m.reg === 2 || m.reg === 4) isTerm = true;
       } else if (opcode === 0x66) {
         if (p >= maxP) break;
@@ -8253,33 +9242,98 @@ class X86CPU {
           const m = this.decodeModRM32(p, maxP);
           if (!m) break;
           p = m.nextP;
-          op = { type: op16 === 0x89 ? 41 : 42, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm: 0, aluOp: 0 };
+          op = new BlockOp(op16 === 0x89 ? 41 : 42, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, 0);
         } else if ((op16 & 0xC4) === 0x00 && op16 < 0x40 && (op16 & 1) === 1) {
           const aluOp = (op16 >>> 3) & 7;
           const dir = op16 & 3;
           const m = this.decodeModRM32(p, maxP);
           if (!m) break;
           p = m.nextP;
-          op = { type: dir === 1 ? 43 : 44, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm: 0, aluOp };
+          op = new BlockOp(dir === 1 ? 43 : 44, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, aluOp);
+        } else if (op16 >= 0x40 && op16 <= 0x4F) {
+          op = new BlockOp(69, instStartEIP, (instStartEIP + 2) | 0, 3, op16 & 7, 0, -1, -1, 0, 0, 0, op16 >= 0x48 ? 1 : 0);
+        } else if (op16 >= 0xB8 && op16 <= 0xBF) {
+          if (p + 2 > maxP) break;
+          const imm = ram[p] | (ram[p + 1] << 8);
+          p += 2;
+          op = new BlockOp(70, instStartEIP, (instStartEIP + 4) | 0, 3, op16 & 7, 0, -1, -1, 0, 0, imm, 0);
+        } else if (op16 === 0x81 || op16 === 0x83) {
+          const m = this.decodeModRM32(p, maxP);
+          if (!m) break;
+          p = m.nextP;
+          let imm;
+          if (op16 === 0x81) {
+            if (p + 2 > maxP) break;
+            imm = ram[p] | (ram[p + 1] << 8);
+            p += 2;
+          } else {
+            if (p >= maxP) break;
+            imm = ((ram[p++] << 24) >> 24) & 0xFFFF;
+          }
+          op = new BlockOp(71, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, imm, m.reg);
+        } else if (op16 === 0x85) {
+          const m = this.decodeModRM32(p, maxP);
+          if (!m) break;
+          p = m.nextP;
+          op = new BlockOp(72, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, 0);
+        } else if (op16 === 0xC1 || op16 === 0xD1 || op16 === 0xD3) {
+          const m = this.decodeModRM32(p, maxP);
+          if (!m || m.reg === 6) break;
+          p = m.nextP;
+          let imm = 1;
+          if (op16 === 0xC1) {
+            if (p >= maxP) break;
+            imm = ram[p++];
+          } else if (op16 === 0xD3) {
+            imm = -1; // CL
+          }
+          op = new BlockOp(73, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, imm, m.reg);
+        } else if (op16 === 0xC7) {
+          const m = this.decodeModRM32(p, maxP);
+          if (!m || m.reg !== 0 || m.nextP + 2 > maxP) break;
+          p = m.nextP;
+          const imm = ram[p] | (ram[p + 1] << 8);
+          p += 2;
+          op = new BlockOp(74, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, 0, m.rm, m.base, m.index, m.scale, m.disp, imm, 0);
         } else {
           break;
         }
       } else if (opcode === 0x0F) {
         if (p >= maxP) break;
         const op2 = ram[p++];
-        if (op2 >= 0x80 && op2 <= 0x8F) {
+        if (op2 === 0x31) {
+          op = new BlockOp(77, instStartEIP, (instStartEIP + 2) | 0, 3, 0, 0, -1, -1, 0, 0, 0, 0);
+        } else if (op2 >= 0x80 && op2 <= 0x8F) {
           if (p + 4 > maxP) break;
           const disp = (ram[p] | (ram[p + 1] << 8) | (ram[p + 2] << 16) | (ram[p + 3] << 24)) | 0;
           p += 4;
           const nextEIP = (instStartEIP + 6) | 0;
-          op = { type: 12, startEIP: instStartEIP, nextEIP, mod: 3, reg: 0, rm: 0, base: -1, index: -1, scale: 0, disp: 0, imm: (nextEIP + disp) | 0, aluOp: op2 & 0x0F };
+          op = new BlockOp(12, instStartEIP, nextEIP, 3, 0, 0, -1, -1, 0, 0, (nextEIP + disp) | 0, op2 & 0x0F);
           isTerm = true;
+        } else if (op2 >= 0x90 && op2 <= 0x9F) {
+          const m = this.decodeModRM32(p, maxP);
+          if (!m) break;
+          p = m.nextP;
+          op = new BlockOp(62, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, op2 & 0x0F);
         } else if (op2 === 0xB6 || op2 === 0xB7 || op2 === 0xAF) {
           const m = this.decodeModRM32(p, maxP);
           if (!m) break;
           p = m.nextP;
           const type = (op2 === 0xB6) ? 31 : (op2 === 0xB7) ? 32 : 33;
-          op = { type, startEIP: instStartEIP, nextEIP: (instStartEIP + (p - startP)) | 0, mod: m.mod, reg: m.reg, rm: m.rm, base: m.base, index: m.index, scale: m.scale, disp: m.disp, imm: 0, aluOp: 0 };
+          op = new BlockOp(type, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, 0);
+        } else if (op2 === 0xBE || op2 === 0xBF) {
+          const m = this.decodeModRM32(p, maxP);
+          if (!m) break;
+          p = m.nextP;
+          op = new BlockOp(op2 === 0xBE ? 63 : 64, instStartEIP, (instStartEIP + (p - startP)) | 0, m.mod, m.reg, m.rm, m.base, m.index, m.scale, m.disp, 0, 0);
+        } else if (op2 >= 0xC8 && op2 <= 0xCF) {
+          op = new BlockOp(65, instStartEIP, (instStartEIP + 2) | 0, 3, op2 & 7, 0, -1, -1, 0, 0, 0, 0);
+        } else if (op2 === 0xBA) {
+          const m = this.decodeModRM32(p, maxP);
+          if (!m || m.mod !== 3 || m.reg < 4 || m.nextP >= maxP) break;
+          p = m.nextP;
+          const imm = ram[p++];
+          op = new BlockOp(66, instStartEIP, (instStartEIP + (p - startP)) | 0, 3, m.reg, m.rm, -1, -1, 0, 0, imm, m.reg);
         } else {
           break;
         }
@@ -8295,34 +9349,39 @@ class X86CPU {
     this.basicBlockDecoded++;
     const line1 = (p - 1) >>> 6;
     const ver1 = this.pageWriteVersion[line1];
-    if (ops.length < 2) {
-      return { physPC: physStart, linPC: linStart | 0, page, version, line1, ver1, ops: null };
+    const codePage = (linStart >>> 12) & 0xFFFFF;
+    if (ops.length < 1) {
+      return { physPC: physStart, linPC: linStart | 0, codePage, expectedTlb, page, version, line1, ver1, ops: null, chain0Lin: -1, chain0Blk: null, chain1Lin: -1, chain1Blk: null };
     }
-    return { physPC: physStart, linPC: linStart | 0, page, version, line1, ver1, ops };
+    return { physPC: physStart, linPC: linStart | 0, codePage, expectedTlb, page, version, line1, ver1, ops, chain0Lin: -1, chain0Blk: null, chain1Lin: -1, chain1Blk: null };
   }
 
   execBasicBlock(blk) {
     const ops = blk.ops;
     const n = ops.length;
     const regs = this.regs;
-    const pit = this.pc.pit;
+    const ram = this.ram;
+    const ram32 = this.ram32;
+    const pver = this.pageWriteVersion;
+    const parity = PARITY_TABLE;
     const blkPage = blk.page;
     const blkVer = blk.version;
     const blkLine1 = blk.line1;
     const blkVer1 = blk.ver1;
+    const paging = (this.cr0 & CR0_PG) !== 0;
+    const isUser = this.cpl === 3;
+    const tlbR = paging ? (isUser ? this.tlbReadUser : this.tlbReadSys) : null;
+    const tlbW = paging ? (isUser ? this.tlbWriteUser : this.tlbWriteSys) : null;
+    const pit = this.pc.pit;
+    const pitFreq = this.pc.cpuFreqHz;
 
     this.basicBlockHits++;
     let executed = 0;
+    let baseInst = this.totalInstructions;
+    let baseCycles = this.cycles;
 
     for (let i = 0; i < n; i++) {
       const op = ops[i];
-      this.startEIP = op.startEIP >>> 0;
-      this.startESP = regs[REG_ESP];
-      this.eip = op.nextEIP >>> 0;
-      this.totalInstructions++;
-      pit.instAccum++;
-      if (pit.count[0] > 1) pit.count[0]--;
-      else pit.count[0] = pit.reload[0];
       executed++;
 
       let ea = 0;
@@ -8330,32 +9389,142 @@ class X86CPU {
         ea = op.disp;
         if (op.base !== -1) ea = (ea + regs[op.base]) | 0;
         if (op.index !== -1) ea = (ea + (regs[op.index] << op.scale)) | 0;
-        this.lastEAOffset = ea >>> 0;
-        this.lastEASeg = SEG_DS;
       }
 
       switch (op.type) {
         case 1: { // ALU r/m32, r32
-          const dst = (op.mod === 3) ? (regs[op.rm] >>> 0) : this.readMem32(ea);
           const src = regs[op.reg] >>> 0;
-          const res = this.execAluOp(op.aluOp, dst, src, 32);
-          if (op.aluOp !== 7) {
-            if (op.mod === 3) regs[op.rm] = res | 0;
-            else {
-              this.writeMem32(ea, res);
-              if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+          if (op.mod === 3) {
+            const dst = regs[op.rm] >>> 0;
+            const aop = op.aluOp;
+            if (aop === 7) { // CMP
+              const res = (dst - src) >>> 0;
+              this.eflags = (this.eflags & ~0x08D5) |
+                (dst < src ? FL_CF : 0) |
+                parity[res & 0xFF] |
+                (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+                (res === 0 ? FL_ZF : 0) |
+                (res & 0x80000000 ? FL_SF : 0) |
+                ((((dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+            } else if (aop === 0) { // ADD
+              const res = (dst + src) >>> 0;
+              regs[op.rm] = res | 0;
+              this.eflags = (this.eflags & ~0x08D5) |
+                (res < dst ? FL_CF : 0) |
+                parity[res & 0xFF] |
+                (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+                (res === 0 ? FL_ZF : 0) |
+                (res & 0x80000000 ? FL_SF : 0) |
+                (((~(dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+            } else if (aop === 5) { // SUB
+              const res = (dst - src) >>> 0;
+              regs[op.rm] = res | 0;
+              this.eflags = (this.eflags & ~0x08D5) |
+                (dst < src ? FL_CF : 0) |
+                parity[res & 0xFF] |
+                (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+                (res === 0 ? FL_ZF : 0) |
+                (res & 0x80000000 ? FL_SF : 0) |
+                ((((dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+            } else if (aop === 1 || aop === 4 || aop === 6) { // OR / AND / XOR
+              const res = (aop === 4 ? (dst & src) : aop === 1 ? (dst | src) : (dst ^ src)) >>> 0;
+              regs[op.rm] = res | 0;
+              this.eflags = (this.eflags & ~0x08D5) | parity[res & 0xFF] | (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0);
+            } else {
+              regs[op.rm] = this.execAluOp(aop, dst, src, 32) | 0;
+            }
+          } else {
+            let dst;
+            const uea = ea >>> 0;
+            const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+            if ((entryR & 2) !== 0 && (uea & 3) === 0) {
+              dst = ram32[((entryR & 0xFFFFF000) | (uea & 0xFFF)) >>> 2] >>> 0;
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              dst = this.readMem32(uea);
+            }
+            const res = this.execAluOp(op.aluOp, dst, src, 32);
+            if (op.aluOp !== 7) {
+              const entryW = tlbW !== null ? tlbW[uea >>> 12] : 0;
+              if ((entryW & 2) !== 0 && (uea & 3) === 0) {
+                const p = (entryW & 0xFFFFF000) | (uea & 0xFFF);
+                ram32[p >>> 2] = res | 0;
+                pver[p >>> 6]++;
+              } else {
+                this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+                this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+                this.writeMem32(uea, res);
+              }
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.eip = op.nextEIP >>> 0;
+                this.totalInstructions = baseInst + executed;
+                this.cycles = baseCycles + executed;
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
             }
           }
           break;
         }
         case 2: { // ALU r32, r/m32
           const dst = regs[op.reg] >>> 0;
-          const src = (op.mod === 3) ? (regs[op.rm] >>> 0) : this.readMem32(ea);
-          const res = this.execAluOp(op.aluOp, dst, src, 32);
-          if (op.aluOp !== 7) regs[op.reg] = res | 0;
+          let src;
+          if (op.mod === 3) {
+            src = regs[op.rm] >>> 0;
+          } else {
+            const uea = ea >>> 0;
+            const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+            if ((entryR & 2) !== 0 && (uea & 3) === 0) {
+              src = ram32[((entryR & 0xFFFFF000) | (uea & 0xFFF)) >>> 2] >>> 0;
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              src = this.readMem32(uea);
+            }
+          }
+          const aop = op.aluOp;
+          if (aop === 7) { // CMP
+            const res = (dst - src) >>> 0;
+            this.eflags = (this.eflags & ~0x08D5) |
+              (dst < src ? FL_CF : 0) |
+              parity[res & 0xFF] |
+              (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+              (res === 0 ? FL_ZF : 0) |
+              (res & 0x80000000 ? FL_SF : 0) |
+              ((((dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+          } else if (aop === 0) { // ADD
+            const res = (dst + src) >>> 0;
+            regs[op.reg] = res | 0;
+            this.eflags = (this.eflags & ~0x08D5) |
+              (res < dst ? FL_CF : 0) |
+              parity[res & 0xFF] |
+              (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+              (res === 0 ? FL_ZF : 0) |
+              (res & 0x80000000 ? FL_SF : 0) |
+              (((~(dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+          } else if (aop === 5) { // SUB
+            const res = (dst - src) >>> 0;
+            regs[op.reg] = res | 0;
+            this.eflags = (this.eflags & ~0x08D5) |
+              (dst < src ? FL_CF : 0) |
+              parity[res & 0xFF] |
+              (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+              (res === 0 ? FL_ZF : 0) |
+              (res & 0x80000000 ? FL_SF : 0) |
+              ((((dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+          } else if (aop === 1 || aop === 4 || aop === 6) {
+            const res = (aop === 4 ? (dst & src) : aop === 1 ? (dst | src) : (dst ^ src)) >>> 0;
+            regs[op.reg] = res | 0;
+            this.eflags = (this.eflags & ~0x08D5) | parity[res & 0xFF] | (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0);
+          } else {
+            regs[op.reg] = this.execAluOp(aop, dst, src, 32) | 0;
+          }
           break;
         }
         case 3: { // ALU r/m8, r8
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
           const dst = (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea);
           const src = this.getReg8(op.reg);
           const res = this.execAluOp(op.aluOp, dst, src, 8);
@@ -8363,12 +9532,17 @@ class X86CPU {
             if (op.mod === 3) this.setReg8(op.rm, res);
             else {
               this.writeMem8(ea, res);
-              if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
             }
           }
           break;
         }
         case 4: { // ALU r8, r/m8
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
           const dst = this.getReg8(op.reg);
           const src = (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea);
           const res = this.execAluOp(op.aluOp, dst, src, 8);
@@ -8376,159 +9550,597 @@ class X86CPU {
           break;
         }
         case 5: { // ALU EAX, imm32
-          const res = this.execAluOp(op.aluOp, regs[0] >>> 0, op.imm, 32);
-          if (op.aluOp !== 7) regs[0] = res | 0;
+          const dst = regs[0] >>> 0;
+          const src = op.imm >>> 0;
+          const aop = op.aluOp;
+          if (aop === 7) {
+            const res = (dst - src) >>> 0;
+            this.eflags = (this.eflags & ~0x08D5) |
+              (dst < src ? FL_CF : 0) | parity[res & 0xFF] | (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+              (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | ((((dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+          } else if (aop === 4) {
+            const res = (dst & src) >>> 0;
+            regs[0] = res | 0;
+            this.eflags = (this.eflags & ~0x08D5) | parity[res & 0xFF] | (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0);
+          } else {
+            const res = this.execAluOp(aop, dst, src, 32);
+            if (aop !== 7) regs[0] = res | 0;
+          }
           break;
         }
         case 6: { // ALU AL, imm8
-          const res = this.execAluOp(op.aluOp, regs[0] & 0xFF, op.imm, 8);
-          if (op.aluOp !== 7) regs[0] = (regs[0] & ~0xFF) | (res & 0xFF);
-          break;
-        }
-        case 7: // INC r32
-          regs[op.reg] = this.aluInc(regs[op.reg] >>> 0, 32) | 0;
-          break;
-        case 8: // DEC r32
-          regs[op.reg] = this.aluDec(regs[op.reg] >>> 0, 32) | 0;
-          break;
-        case 9: // PUSH r32
-          this.push32(regs[op.reg]);
-          if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
-          break;
-        case 10: { // POP r32
-          const v = this.pop32();
-          regs[op.reg] = v | 0;
-          break;
-        }
-        case 11: // PUSH imm32
-          this.push32(op.imm);
-          if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
-          break;
-        case 12: // Jcc rel
-          if (this.evalCC(op.aluOp)) {
-            this.eip = op.imm >>> 0;
+          const dst = regs[0] & 0xFF;
+          const src = op.imm & 0xFF;
+          const aop = op.aluOp;
+          if (aop === 4) { // AND AL, imm8
+            const res = dst & src;
+            regs[0] = (regs[0] & ~0xFF) | res;
+            this.eflags = (this.eflags & ~0x08D5) | parity[res] | (res === 0 ? FL_ZF : 0) | (res & 0x80 ? FL_SF : 0);
+          } else if (aop === 7) { // CMP AL, imm8
+            const res = (dst - src) & 0xFF;
+            this.eflags = (this.eflags & ~0x08D5) |
+              (dst < src ? FL_CF : 0) | parity[res] | (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+              (res === 0 ? FL_ZF : 0) | (res & 0x80 ? FL_SF : 0) | ((((dst ^ src) & (dst ^ res)) & 0x80) ? FL_OF : 0);
+          } else {
+            const res = this.execAluOp(aop, dst, src, 8);
+            if (aop !== 7) regs[0] = (regs[0] & ~0xFF) | (res & 0xFF);
           }
           break;
+        }
+        case 7: { // INC r32
+          const a = regs[op.reg] >>> 0;
+          const res = (a + 1) >>> 0;
+          regs[op.reg] = res | 0;
+          this.eflags = (this.eflags & ~(0x08D5 & ~FL_CF)) |
+            parity[res & 0xFF] | (((a ^ 1 ^ res) & 0x10) ? FL_AF : 0) |
+            (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | (res === 0x80000000 ? FL_OF : 0);
+          break;
+        }
+        case 8: { // DEC r32
+          const a = regs[op.reg] >>> 0;
+          const res = (a - 1) >>> 0;
+          regs[op.reg] = res | 0;
+          this.eflags = (this.eflags & ~(0x08D5 & ~FL_CF)) |
+            parity[res & 0xFF] | (((a ^ 1 ^ res) & 0x10) ? FL_AF : 0) |
+            (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | (a === 0x80000000 ? FL_OF : 0);
+          break;
+        }
+        case 9: { // PUSH r32
+          const val = regs[op.reg];
+          const esp = (regs[4] - 4) >>> 0;
+          const entryW = tlbW !== null ? tlbW[esp >>> 12] : 0;
+          if ((entryW & 2) !== 0 && (esp & 3) === 0) {
+            const p = (entryW & 0xFFFFF000) | (esp & 0xFFF);
+            ram32[p >>> 2] = val | 0;
+            pver[p >>> 6]++;
+            regs[4] = esp | 0;
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            this.push32(val);
+          }
+          if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+            this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed;
+            this.cycles = baseCycles + executed;
+            this.basicBlockInstrs += executed;
+            return executed;
+          }
+          break;
+        }
+        case 10: { // POP r32
+          const esp = regs[4] >>> 0;
+          const entryR = tlbR !== null ? tlbR[esp >>> 12] : 0;
+          if ((entryR & 2) !== 0 && (esp & 3) === 0) {
+            const p = (entryR & 0xFFFFF000) | (esp & 0xFFF);
+            regs[4] = (esp + 4) | 0;
+            regs[op.reg] = ram32[p >>> 2];
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            regs[op.reg] = this.pop32() | 0;
+          }
+          break;
+        }
+        case 11: { // PUSH imm32
+          const esp = (regs[4] - 4) >>> 0;
+          const entryW = tlbW !== null ? tlbW[esp >>> 12] : 0;
+          if ((entryW & 2) !== 0 && (esp & 3) === 0) {
+            const p = (entryW & 0xFFFFF000) | (esp & 0xFFF);
+            ram32[p >>> 2] = op.imm | 0;
+            pver[p >>> 6]++;
+            regs[4] = esp | 0;
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            this.push32(op.imm);
+          }
+          if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+            this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed;
+            this.cycles = baseCycles + executed;
+            this.basicBlockInstrs += executed;
+            return executed;
+          }
+          break;
+        }
+        case 12: { // Jcc rel
+          const cc = op.aluOp;
+          const ef = this.eflags;
+          let take = false;
+          switch (cc) {
+            case 4:  take = (ef & FL_ZF) !== 0; break;
+            case 5:  take = (ef & FL_ZF) === 0; break;
+            case 2:  take = (ef & FL_CF) !== 0; break;
+            case 3:  take = (ef & FL_CF) === 0; break;
+            case 6:  take = (ef & (FL_CF | FL_ZF)) !== 0; break;
+            case 7:  take = (ef & (FL_CF | FL_ZF)) === 0; break;
+            case 8:  take = (ef & FL_SF) !== 0; break;
+            case 9:  take = (ef & FL_SF) === 0; break;
+            case 12: take = ((ef >>> 7) & 1) !== ((ef >>> 11) & 1); break;
+            case 13: take = ((ef >>> 7) & 1) === ((ef >>> 11) & 1); break;
+            case 14: take = ((ef & FL_ZF) !== 0) || (((ef >>> 7) & 1) !== ((ef >>> 11) & 1)); break;
+            case 15: take = ((ef & FL_ZF) === 0) && (((ef >>> 7) & 1) === ((ef >>> 11) & 1)); break;
+            default: take = this.evalCC(cc); break;
+          }
+          this.eip = (take ? op.imm : op.nextEIP) >>> 0;
+          this.totalInstructions = baseInst + executed;
+          this.cycles = baseCycles + executed;
+          this.basicBlockInstrs += executed;
+          return executed;
+        }
         case 13: { // ALU r/m32, imm
-          const dst = (op.mod === 3) ? (regs[op.rm] >>> 0) : this.readMem32(ea);
-          const res = this.execAluOp(op.aluOp, dst, op.imm, 32);
-          if (op.aluOp !== 7) {
-            if (op.mod === 3) regs[op.rm] = res | 0;
-            else {
-              this.writeMem32(ea, res);
-              if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+          const src = op.imm >>> 0;
+          if (op.mod === 3) {
+            const dst = regs[op.rm] >>> 0;
+            const aop = op.aluOp;
+            if (aop === 7) { // CMP
+              const res = (dst - src) >>> 0;
+              this.eflags = (this.eflags & ~0x08D5) |
+                (dst < src ? FL_CF : 0) | parity[res & 0xFF] | (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+                (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | ((((dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+            } else if (aop === 0) { // ADD
+              const res = (dst + src) >>> 0;
+              regs[op.rm] = res | 0;
+              this.eflags = (this.eflags & ~0x08D5) |
+                (res < dst ? FL_CF : 0) | parity[res & 0xFF] | (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+                (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | (((~(dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+            } else if (aop === 5) { // SUB
+              const res = (dst - src) >>> 0;
+              regs[op.rm] = res | 0;
+              this.eflags = (this.eflags & ~0x08D5) |
+                (dst < src ? FL_CF : 0) | parity[res & 0xFF] | (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+                (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | ((((dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+            } else if (aop === 1 || aop === 4 || aop === 6) {
+              const res = (aop === 4 ? (dst & src) : aop === 1 ? (dst | src) : (dst ^ src)) >>> 0;
+              regs[op.rm] = res | 0;
+              this.eflags = (this.eflags & ~0x08D5) | parity[res & 0xFF] | (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0);
+            } else {
+              regs[op.rm] = this.execAluOp(aop, dst, src, 32) | 0;
+            }
+          } else {
+            let dst;
+            const uea = ea >>> 0;
+            const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+            if ((entryR & 2) !== 0 && (uea & 3) === 0) {
+              dst = ram32[((entryR & 0xFFFFF000) | (uea & 0xFFF)) >>> 2] >>> 0;
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              dst = this.readMem32(uea);
+            }
+            const aop = op.aluOp;
+            if (aop === 7) {
+              const res = (dst - src) >>> 0;
+              this.eflags = (this.eflags & ~0x08D5) |
+                (dst < src ? FL_CF : 0) | parity[res & 0xFF] | (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+                (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | ((((dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+            } else {
+              let res;
+              if (aop === 0) {
+                res = (dst + src) >>> 0;
+                this.eflags = (this.eflags & ~0x08D5) |
+                  (res < dst ? FL_CF : 0) | parity[res & 0xFF] | (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+                  (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | (((~(dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+              } else if (aop === 5) {
+                res = (dst - src) >>> 0;
+                this.eflags = (this.eflags & ~0x08D5) |
+                  (dst < src ? FL_CF : 0) | parity[res & 0xFF] | (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+                  (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | ((((dst ^ src) & (dst ^ res)) & 0x80000000) ? FL_OF : 0);
+              } else if (aop === 1 || aop === 4 || aop === 6) {
+                res = (aop === 4 ? (dst & src) : aop === 1 ? (dst | src) : (dst ^ src)) >>> 0;
+                this.eflags = (this.eflags & ~0x08D5) | parity[res & 0xFF] | (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0);
+              } else {
+                res = this.execAluOp(aop, dst, src, 32);
+              }
+              const entryW = tlbW !== null ? tlbW[uea >>> 12] : 0;
+              if ((entryW & 2) !== 0 && (uea & 3) === 0) {
+                const p = (entryW & 0xFFFFF000) | (uea & 0xFFF);
+                ram32[p >>> 2] = res | 0;
+                pver[p >>> 6]++;
+              } else {
+                this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+                this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+                this.writeMem32(uea, res);
+              }
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.eip = op.nextEIP >>> 0;
+                this.totalInstructions = baseInst + executed;
+                this.cycles = baseCycles + executed;
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
             }
           }
           break;
         }
         case 14: { // ALU r/m8, imm8
-          const dst = (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea);
-          const res = this.execAluOp(op.aluOp, dst, op.imm, 8);
-          if (op.aluOp !== 7) {
-            if (op.mod === 3) this.setReg8(op.rm, res);
-            else {
-              this.writeMem8(ea, res);
-              if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+          let dst;
+          const uea = ea >>> 0;
+          if (op.mod === 3) {
+            const rm = op.rm;
+            dst = rm < 4 ? (regs[rm] & 0xFF) : ((regs[rm - 4] >>> 8) & 0xFF);
+          } else {
+            const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+            if (entryR & 2) {
+              dst = ram[(entryR & 0xFFFFF000) | (uea & 0xFFF)];
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              dst = this.readMem8(uea);
+            }
+          }
+          const src = op.imm & 0xFF;
+          const aop = op.aluOp;
+          if (aop === 7) { // CMP r/m8, imm8
+            const res = (dst - src) & 0xFF;
+            this.eflags = (this.eflags & ~0x08D5) |
+              (dst < src ? FL_CF : 0) | parity[res] | (((dst ^ src ^ res) & 0x10) ? FL_AF : 0) |
+              (res === 0 ? FL_ZF : 0) | (res & 0x80 ? FL_SF : 0) | ((((dst ^ src) & (dst ^ res)) & 0x80) ? FL_OF : 0);
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            const res = this.execAluOp(aop, dst, src, 8);
+            if (op.mod === 3) {
+              const rm = op.rm;
+              if (rm < 4) regs[rm] = (regs[rm] & ~0xFF) | (res & 0xFF);
+              else regs[rm - 4] = (regs[rm - 4] & ~0xFF00) | ((res & 0xFF) << 8);
+            } else {
+              const entryW = tlbW !== null ? tlbW[uea >>> 12] : 0;
+              if (entryW & 2) {
+                const p = (entryW & 0xFFFFF000) | (uea & 0xFFF);
+                ram[p] = res & 0xFF;
+                pver[p >>> 6]++;
+              } else {
+                this.writeMem8(uea, res);
+              }
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
             }
           }
           break;
         }
         case 15: { // TEST r/m32, r32
-          const a = (op.mod === 3) ? regs[op.rm] : this.readMem32(ea);
-          this.updateLogicFlags(a & regs[op.reg], 32);
+          let a;
+          if (op.mod === 3) {
+            a = regs[op.rm];
+          } else {
+            const uea = ea >>> 0;
+            const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+            if ((entryR & 2) !== 0 && (uea & 3) === 0) {
+              a = ram32[((entryR & 0xFFFFF000) | (uea & 0xFFF)) >>> 2];
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              a = this.readMem32(uea);
+            }
+          }
+          const res = (a & regs[op.reg]) >>> 0;
+          this.eflags = (this.eflags & ~0x08D5) | parity[res & 0xFF] | (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0);
           break;
         }
         case 16: { // TEST r/m8, r8
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
           const a = (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea);
-          this.updateLogicFlags(a & this.getReg8(op.reg), 8);
+          const res = (a & this.getReg8(op.reg)) & 0xFF;
+          this.eflags = (this.eflags & ~0x08D5) | parity[res] | (res === 0 ? FL_ZF : 0) | (res & 0x80 ? FL_SF : 0);
           break;
         }
-        case 17: // MOV r/m32, r32
-          if (op.mod === 3) regs[op.rm] = regs[op.reg];
-          else {
-            this.writeMem32(ea, regs[op.reg]);
-            if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+        case 17: { // MOV r/m32, r32
+          if (op.mod === 3) {
+            regs[op.rm] = regs[op.reg];
+          } else {
+            const uea = ea >>> 0;
+            const entryW = tlbW !== null ? tlbW[uea >>> 12] : 0;
+            if ((entryW & 2) !== 0 && (uea & 3) === 0) {
+              const p = (entryW & 0xFFFFF000) | (uea & 0xFFF);
+              ram32[p >>> 2] = regs[op.reg];
+              pver[p >>> 6]++;
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              this.writeMem32(uea, regs[op.reg]);
+            }
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed;
+              this.cycles = baseCycles + executed;
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
           }
           break;
-        case 18: // MOV r32, r/m32
-          regs[op.reg] = (op.mod === 3) ? regs[op.rm] : (this.readMem32(ea) | 0);
-          break;
-        case 19: // MOV r/m8, r8
-          if (op.mod === 3) this.setReg8(op.rm, this.getReg8(op.reg));
-          else {
-            this.writeMem8(ea, this.getReg8(op.reg));
-            if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+        }
+        case 18: { // MOV r32, r/m32
+          if (op.mod === 3) {
+            regs[op.reg] = regs[op.rm];
+          } else {
+            const uea = ea >>> 0;
+            const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+            if ((entryR & 2) !== 0 && (uea & 3) === 0) {
+              regs[op.reg] = ram32[((entryR & 0xFFFFF000) | (uea & 0xFFF)) >>> 2];
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              regs[op.reg] = this.readMem32(uea) | 0;
+            }
           }
           break;
-        case 20: // MOV r8, r/m8
-          this.setReg8(op.reg, (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea));
+        }
+        case 19: { // MOV r/m8, r8
+          const rIdx = op.reg;
+          const v = rIdx < 4 ? (regs[rIdx] & 0xFF) : ((regs[rIdx - 4] >>> 8) & 0xFF);
+          if (op.mod === 3) {
+            const rm = op.rm;
+            if (rm < 4) regs[rm] = (regs[rm] & ~0xFF) | v;
+            else regs[rm - 4] = (regs[rm - 4] & ~0xFF00) | (v << 8);
+          } else {
+            const uea = ea >>> 0;
+            const entryW = tlbW !== null ? tlbW[uea >>> 12] : 0;
+            if (entryW & 2) {
+              const p = (entryW & 0xFFFFF000) | (uea & 0xFFF);
+              ram[p] = v;
+              pver[p >>> 6]++;
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              this.writeMem8(uea, v);
+            }
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed;
+              this.cycles = baseCycles + executed;
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          }
           break;
+        }
+        case 20: { // MOV r8, r/m8
+          let v;
+          if (op.mod === 3) {
+            const rm = op.rm;
+            v = rm < 4 ? (regs[rm] & 0xFF) : ((regs[rm - 4] >>> 8) & 0xFF);
+          } else {
+            const uea = ea >>> 0;
+            const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+            if (entryR & 2) {
+              v = ram[(entryR & 0xFFFFF000) | (uea & 0xFFF)];
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              v = this.readMem8(uea);
+            }
+          }
+          const rIdx = op.reg;
+          if (rIdx < 4) regs[rIdx] = (regs[rIdx] & ~0xFF) | v;
+          else regs[rIdx - 4] = (regs[rIdx - 4] & ~0xFF00) | (v << 8);
+          break;
+        }
         case 21: // LEA r32, m
           regs[op.reg] = ea | 0;
           break;
         case 22: // MOV r32, imm32
           regs[op.reg] = op.imm;
           break;
-        case 23: // MOV r8, imm8
-          this.setReg8(op.reg, op.imm);
+        case 23: { // MOV r8, imm8
+          const rIdx = op.reg;
+          if (rIdx < 4) regs[rIdx] = (regs[rIdx] & ~0xFF) | (op.imm & 0xFF);
+          else regs[rIdx - 4] = (regs[rIdx - 4] & ~0xFF00) | ((op.imm & 0xFF) << 8);
           break;
+        }
         case 24: { // SHIFT r/m32, imm
-          const dst = (op.mod === 3) ? (regs[op.rm] >>> 0) : this.readMem32(ea);
-          const res = this.execShiftOp(op.aluOp, dst, op.imm, 32);
-          if ((op.imm & 0x1F) !== 0) {
-            if (op.mod === 3) regs[op.rm] = res | 0;
-            else {
+          const cnt = op.imm & 0x1F;
+          if (op.mod === 3) {
+            const dst = regs[op.rm] >>> 0;
+            if (cnt !== 0) {
+              const sop = op.aluOp;
+              if (sop === 4) { // SHL
+                const cf = (dst >>> (32 - cnt)) & 1;
+                const res = (dst << cnt) >>> 0;
+                const of = cf ^ (res >>> 31);
+                regs[op.rm] = res | 0;
+                this.eflags = (this.eflags & ~0x08D5) | cf | parity[res & 0xFF] | (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | (of ? FL_OF : 0);
+              } else if (sop === 5) { // SHR
+                const cf = (dst >>> (cnt - 1)) & 1;
+                const res = (dst >>> cnt) >>> 0;
+                const of = dst >>> 31;
+                regs[op.rm] = res | 0;
+                this.eflags = (this.eflags & ~0x08D5) | cf | parity[res & 0xFF] | (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | (of ? FL_OF : 0);
+              } else if (sop === 7) { // SAR
+                const sdst = dst | 0;
+                const cf = (sdst >>> (cnt - 1)) & 1;
+                const res = (sdst >> cnt) >>> 0;
+                regs[op.rm] = res | 0;
+                this.eflags = (this.eflags & ~0x08D5) | cf | parity[res & 0xFF] | (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0);
+              } else {
+                regs[op.rm] = this.execShiftOp(sop, dst, cnt, 32) | 0;
+              }
+            }
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            const dst = this.readMem32(ea);
+            const res = this.execShiftOp(op.aluOp, dst, cnt, 32);
+            if (cnt !== 0) {
               this.writeMem32(ea, res);
-              if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
             }
           }
           break;
         }
         case 25: { // SHIFT r/m32, CL
-          const cnt = regs[1] & 0xFF;
-          const dst = (op.mod === 3) ? (regs[op.rm] >>> 0) : this.readMem32(ea);
-          const res = this.execShiftOp(op.aluOp, dst, cnt, 32);
-          if ((cnt & 0x1F) !== 0) {
-            if (op.mod === 3) regs[op.rm] = res | 0;
-            else {
+          const cnt = regs[1] & 0x1F;
+          if (op.mod === 3) {
+            const dst = regs[op.rm] >>> 0;
+            const res = this.execShiftOp(op.aluOp, dst, cnt, 32);
+            if (cnt !== 0) regs[op.rm] = res | 0;
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            const dst = this.readMem32(ea);
+            const res = this.execShiftOp(op.aluOp, dst, cnt, 32);
+            if (cnt !== 0) {
               this.writeMem32(ea, res);
-              if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
             }
           }
           break;
         }
-        case 26: // MOV r/m32, imm32
-          if (op.mod === 3) regs[op.rm] = op.imm;
-          else {
-            this.writeMem32(ea, op.imm);
-            if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+        case 26: { // MOV r/m32, imm32
+          if (op.mod === 3) {
+            regs[op.rm] = op.imm;
+          } else {
+            const uea = ea >>> 0;
+            const entryW = tlbW !== null ? tlbW[uea >>> 12] : 0;
+            if ((entryW & 2) !== 0 && (uea & 3) === 0) {
+              const p = (entryW & 0xFFFFF000) | (uea & 0xFFF);
+              ram32[p >>> 2] = op.imm;
+              pver[p >>> 6]++;
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              this.writeMem32(uea, op.imm);
+            }
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed;
+              this.cycles = baseCycles + executed;
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
           }
           break;
-        case 27: // MOV r/m8, imm8
-          if (op.mod === 3) this.setReg8(op.rm, op.imm);
-          else {
-            this.writeMem8(ea, op.imm);
-            if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+        }
+        case 27: { // MOV r/m8, imm8
+          if (op.mod === 3) {
+            this.setReg8(op.rm, op.imm);
+          } else {
+            const uea = ea >>> 0;
+            const entryW = tlbW !== null ? tlbW[uea >>> 12] : 0;
+            if (entryW & 2) {
+              const p = (entryW & 0xFFFFF000) | (uea & 0xFFF);
+              ram[p] = op.imm & 0xFF;
+              pver[p >>> 6]++;
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              this.writeMem8(uea, op.imm);
+            }
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed;
+              this.cycles = baseCycles + executed;
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
           }
           break;
+        }
         case 28: // JMP rel
           this.eip = op.imm >>> 0;
-          break;
-        case 29: // CALL rel32
-          this.push32(op.nextEIP);
+          this.totalInstructions = baseInst + executed;
+          this.cycles = baseCycles + executed;
+          this.basicBlockInstrs += executed;
+          return executed;
+        case 29: { // CALL rel32
+          const esp = (regs[4] - 4) >>> 0;
+          const entryW = tlbW !== null ? tlbW[esp >>> 12] : 0;
+          if ((entryW & 2) !== 0 && (esp & 3) === 0) {
+            const p = (entryW & 0xFFFFF000) | (esp & 0xFFF);
+            ram32[p >>> 2] = op.nextEIP | 0;
+            pver[p >>> 6]++;
+            regs[4] = esp | 0;
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            this.push32(op.nextEIP);
+          }
           this.eip = op.imm >>> 0;
+          this.totalInstructions = baseInst + executed;
+          this.cycles = baseCycles + executed;
+          this.basicBlockInstrs += executed;
+          return executed;
+        }
+        case 30: { // RET / RET imm16
+          const esp = regs[4] >>> 0;
+          const entryR = tlbR !== null ? tlbR[esp >>> 12] : 0;
+          let target;
+          if ((entryR & 2) !== 0 && (esp & 3) === 0) {
+            const p = (entryR & 0xFFFFF000) | (esp & 0xFFF);
+            target = ram32[p >>> 2] >>> 0;
+            regs[4] = (esp + 4 + op.imm) | 0;
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            target = this.pop32() >>> 0;
+            if (op.imm !== 0) regs[4] = (regs[4] + op.imm) | 0;
+          }
+          this.eip = target;
+          this.totalInstructions = baseInst + executed;
+          this.cycles = baseCycles + executed;
+          this.basicBlockInstrs += executed;
+          return executed;
+        }
+        case 31: { // MOVZX r32, r/m8
+          if (op.mod === 3) {
+            const rm = op.rm;
+            regs[op.reg] = rm < 4 ? (regs[rm] & 0xFF) : ((regs[rm - 4] >>> 8) & 0xFF);
+          } else {
+            const uea = ea >>> 0;
+            const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+            if (entryR & 2) {
+              regs[op.reg] = ram[(entryR & 0xFFFFF000) | (uea & 0xFFF)];
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              regs[op.reg] = this.readMem8(uea);
+            }
+          }
           break;
-        case 30: // RET / RET imm16
-          this.eip = this.pop32() >>> 0;
-          if (op.imm !== 0) regs[REG_ESP] = (regs[REG_ESP] + op.imm) | 0;
+        }
+        case 32: { // MOVZX r32, r/m16
+          if (op.mod === 3) {
+            regs[op.reg] = regs[op.rm] & 0xFFFF;
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            regs[op.reg] = this.readMem16(ea);
+          }
           break;
-        case 31: // MOVZX r32, r/m8
-          regs[op.reg] = (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea);
-          break;
-        case 32: // MOVZX r32, r/m16
-          regs[op.reg] = (op.mod === 3) ? (regs[op.rm] & 0xFFFF) : this.readMem16(ea);
-          break;
+        }
         case 33: { // IMUL r32, r/m32
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
           const a = regs[op.reg] | 0;
           const b = ((op.mod === 3) ? regs[op.rm] : this.readMem32(ea)) | 0;
           const res = Math.imul(a, b);
@@ -8545,64 +10157,175 @@ class X86CPU {
           regs[op.reg] = t;
           break;
         }
-        case 36: // TEST AL, imm8
-          this.updateLogicFlags((regs[0] & 0xFF) & op.imm, 8);
+        case 36: { // TEST AL, imm8
+          const res = (regs[0] & op.imm) & 0xFF;
+          this.eflags = (this.eflags & ~0x08D5) | parity[res] | (res === 0 ? FL_ZF : 0) | (res & 0x80 ? FL_SF : 0);
           break;
-        case 37: // TEST EAX, imm32
-          this.updateLogicFlags(regs[0] & op.imm, 32);
+        }
+        case 37: { // TEST EAX, imm32
+          const res = (regs[0] & op.imm) >>> 0;
+          this.eflags = (this.eflags & ~0x08D5) | parity[res & 0xFF] | (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0);
           break;
+        }
         case 38: { // TEST r/m8, imm8
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
           const v = (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea);
-          this.updateLogicFlags(v & op.imm, 8);
+          const res = (v & op.imm) & 0xFF;
+          this.eflags = (this.eflags & ~0x08D5) | parity[res] | (res === 0 ? FL_ZF : 0) | (res & 0x80 ? FL_SF : 0);
           break;
         }
         case 39: { // TEST r/m32, imm32
-          const v = (op.mod === 3) ? regs[op.rm] : this.readMem32(ea);
-          this.updateLogicFlags(v & op.imm, 32);
+          let v;
+          if (op.mod === 3) {
+            v = regs[op.rm];
+          } else {
+            const uea = ea >>> 0;
+            const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+            if ((entryR & 2) !== 0 && (uea & 3) === 0) {
+              v = ram32[((entryR & 0xFFFFF000) | (uea & 0xFFF)) >>> 2];
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              v = this.readMem32(uea);
+            }
+          }
+          const res = (v & op.imm) >>> 0;
+          this.eflags = (this.eflags & ~0x08D5) | parity[res & 0xFF] | (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0);
           break;
         }
         case 40: { // Group 5 (0xFF /0 INC, /1 DEC, /2 CALL, /4 JMP, /6 PUSH)
-          const v = (op.mod === 3) ? (regs[op.rm] >>> 0) : this.readMem32(ea);
-          if (op.aluOp === 0) {
-            const res = this.aluInc(v, 32);
-            if (op.mod === 3) regs[op.rm] = res | 0;
-            else {
-              this.writeMem32(ea, res);
-              if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+          let v;
+          const uea = ea >>> 0;
+          if (op.mod === 3) {
+            v = regs[op.rm] >>> 0;
+          } else {
+            const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+            if ((entryR & 2) !== 0 && (uea & 3) === 0) {
+              v = ram32[((entryR & 0xFFFFF000) | (uea & 0xFFF)) >>> 2] >>> 0;
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              v = this.readMem32(uea);
             }
-          } else if (op.aluOp === 1) {
-            const res = this.aluDec(v, 32);
-            if (op.mod === 3) regs[op.rm] = res | 0;
-            else {
-              this.writeMem32(ea, res);
-              if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
-            }
-          } else if (op.aluOp === 2) {
-            this.push32(op.nextEIP);
-            this.eip = v >>> 0;
-          } else if (op.aluOp === 4) {
-            this.eip = v >>> 0;
-          } else if (op.aluOp === 6) {
-            this.push32(v);
-            if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
           }
+          const sub = op.aluOp;
+          if (sub === 6) { // PUSH r/m32
+            const esp = (regs[4] - 4) >>> 0;
+            const entryW = tlbW !== null ? tlbW[esp >>> 12] : 0;
+            if ((entryW & 2) !== 0 && (esp & 3) === 0) {
+              const p = (entryW & 0xFFFFF000) | (esp & 0xFFF);
+              ram32[p >>> 2] = v | 0;
+              pver[p >>> 6]++;
+              regs[4] = esp | 0;
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              this.push32(v);
+            }
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed;
+              this.cycles = baseCycles + executed;
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          } else if (sub === 0 || sub === 1) { // INC / DEC r/m32
+            const res = (sub === 0) ? ((v + 1) >>> 0) : ((v - 1) >>> 0);
+            const ofBit = (sub === 0) ? (res === 0x80000000 ? FL_OF : 0) : (v === 0x80000000 ? FL_OF : 0);
+            this.eflags = (this.eflags & ~(0x08D5 & ~FL_CF)) |
+              parity[res & 0xFF] | (((v ^ 1 ^ res) & 0x10) ? FL_AF : 0) |
+              (res === 0 ? FL_ZF : 0) | (res & 0x80000000 ? FL_SF : 0) | ofBit;
+            if (op.mod === 3) {
+              regs[op.rm] = res | 0;
+            } else {
+              const entryW = tlbW !== null ? tlbW[uea >>> 12] : 0;
+              if ((entryW & 2) !== 0 && (uea & 3) === 0) {
+                const p = (entryW & 0xFFFFF000) | (uea & 0xFFF);
+                ram32[p >>> 2] = res | 0;
+                pver[p >>> 6]++;
+              } else {
+                this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+                this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+                this.writeMem32(uea, res);
+              }
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.eip = op.nextEIP >>> 0;
+                this.totalInstructions = baseInst + executed;
+                this.cycles = baseCycles + executed;
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
+            }
+          } else if (sub === 2) { // CALL r/m32
+            const esp = (regs[4] - 4) >>> 0;
+            const entryW = tlbW !== null ? tlbW[esp >>> 12] : 0;
+            if ((entryW & 2) !== 0 && (esp & 3) === 0) {
+              const p = (entryW & 0xFFFFF000) | (esp & 0xFFF);
+              ram32[p >>> 2] = op.nextEIP | 0;
+              pver[p >>> 6]++;
+              regs[4] = esp | 0;
+            } else {
+              this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+              this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+              this.push32(op.nextEIP);
+            }
+            this.eip = v >>> 0;
+            this.totalInstructions = baseInst + executed;
+            this.cycles = baseCycles + executed;
+            this.basicBlockInstrs += executed;
+            return executed;
+          } else if (sub === 4) { // JMP r/m32
+            this.eip = v >>> 0;
+            this.totalInstructions = baseInst + executed;
+            this.cycles = baseCycles + executed;
+            this.basicBlockInstrs += executed;
+            return executed;
+          }
+          break;
+        }
+        case 77: { // RDTSC
+          const tsc = baseCycles + executed;
+          regs[0] = tsc | 0;
+          regs[2] = Math.floor(tsc / 4294967296) | 0;
+          break;
+        }
+        case 76: { // IN AL, 0x61 (CPL 0)
+          const curCyc = baseCycles + executed;
+          const v = pit.gate[2]
+            ? (pit.readPort61(curCyc) & 0xFF)
+            : ((pit.port61 & 0x0F) | ((Math.floor(Math.floor((curCyc * 1193182) / pitFreq) / 18) & 1) << 4) | ((pit.mode[2] === 0 ? 0 : 1) << 5));
+          regs[0] = (regs[0] & ~0xFF) | v;
           break;
         }
         case 41: { // 0x66 MOV r/m16, r16
           const v = regs[op.reg] & 0xFFFF;
           if (op.mod === 3) regs[op.rm] = (regs[op.rm] & ~0xFFFF) | v;
           else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
             this.writeMem16(ea, v);
-            if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
           }
           break;
         }
         case 42: { // 0x66 MOV r16, r/m16
-          const v = (op.mod === 3) ? (regs[op.rm] & 0xFFFF) : this.readMem16(ea);
-          regs[op.reg] = (regs[op.reg] & ~0xFFFF) | v;
+          if (op.mod === 3) {
+            regs[op.reg] = (regs[op.reg] & ~0xFFFF) | (regs[op.rm] & 0xFFFF);
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            const v = this.readMem16(ea);
+            regs[op.reg] = (regs[op.reg] & ~0xFFFF) | v;
+          }
           break;
         }
         case 43: { // 0x66 ALU r/m16, r16
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
           const dst = (op.mod === 3) ? (regs[op.rm] & 0xFFFF) : this.readMem16(ea);
           const src = regs[op.reg] & 0xFFFF;
           const res = this.execAluOp(op.aluOp, dst, src, 16);
@@ -8610,21 +10333,398 @@ class X86CPU {
             if (op.mod === 3) regs[op.rm] = (regs[op.rm] & ~0xFFFF) | (res & 0xFFFF);
             else {
               this.writeMem16(ea, res);
-              if (this.pageWriteVersion[blkPage] !== blkVer || this.pageWriteVersion[blkLine1] !== blkVer1) return executed;
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
             }
           }
           break;
         }
         case 44: { // 0x66 ALU r16, r/m16
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
           const dst = regs[op.reg] & 0xFFFF;
           const src = (op.mod === 3) ? (regs[op.rm] & 0xFFFF) : this.readMem16(ea);
           const res = this.execAluOp(op.aluOp, dst, src, 16);
           if (op.aluOp !== 7) regs[op.reg] = (regs[op.reg] & ~0xFFFF) | (res & 0xFFFF);
           break;
         }
+        case 45: { // SHIFT r/m8, imm8/1
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const dst = (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea);
+          const res = this.execShiftOp(op.aluOp, dst, op.imm, 8);
+          if ((op.imm & 0x1F) !== 0) {
+            if (op.mod === 3) this.setReg8(op.rm, res);
+            else {
+              this.writeMem8(ea, res);
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
+            }
+          }
+          break;
+        }
+        case 46: { // SHIFT r/m8, CL
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const cnt = regs[1] & 0x1F;
+          const dst = (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea);
+          const res = this.execShiftOp(op.aluOp, dst, cnt, 8);
+          if (cnt !== 0) {
+            if (op.mod === 3) this.setReg8(op.rm, res);
+            else {
+              this.writeMem8(ea, res);
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
+            }
+          }
+          break;
+        }
+        case 47: // SAHF
+          this.eflags = (this.eflags & ~0xD5) | (((regs[0] >>> 8) & 0xFF) & 0xD5) | 0x02;
+          break;
+        case 48: // LAHF
+          regs[0] = (regs[0] & ~0xFF00) | (((this.eflags & 0xD5) | 0x02) << 8);
+          break;
+        case 49: // CMC / CLC / STC / CLD / STD
+          if (op.aluOp === 0xF5) this.eflags ^= FL_CF;
+          else if (op.aluOp === 0xF8) this.eflags &= ~FL_CF;
+          else if (op.aluOp === 0xF9) this.eflags |= FL_CF;
+          else if (op.aluOp === 0xFC) this.eflags &= ~FL_DF;
+          else if (op.aluOp === 0xFD) this.eflags |= FL_DF;
+          break;
+        case 50: { // LEAVE (32-bit flat mode)
+          const esp = regs[5] >>> 0;
+          const entryR = tlbR !== null ? tlbR[esp >>> 12] : 0;
+          if ((entryR & 2) !== 0 && (esp & 3) === 0) {
+            const p = (entryR & 0xFFFFF000) | (esp & 0xFFF);
+            regs[4] = (esp + 4) | 0;
+            regs[5] = ram32[p >>> 2];
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            regs[4] = regs[5];
+            regs[5] = this.pop32() | 0;
+          }
+          break;
+        }
+        case 51: // CWDE
+          regs[0] = (regs[0] << 16) >> 16;
+          break;
+        case 52: // CDQ
+          regs[2] = (regs[0] < 0) ? -1 : 0;
+          break;
+        case 53: { // MOV AL, moffs32
+          const uea = op.imm >>> 0;
+          const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+          if (entryR & 2) {
+            regs[0] = (regs[0] & ~0xFF) | ram[(entryR & 0xFFFFF000) | (uea & 0xFFF)];
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            this.setReg8(0, this.readMem8(uea));
+          }
+          break;
+        }
+        case 54: { // MOV EAX, moffs32
+          const uea = op.imm >>> 0;
+          const entryR = tlbR !== null ? tlbR[uea >>> 12] : 0;
+          if ((entryR & 2) !== 0 && (uea & 3) === 0) {
+            regs[0] = ram32[((entryR & 0xFFFFF000) | (uea & 0xFFF)) >>> 2];
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            regs[0] = this.readMem32(uea) | 0;
+          }
+          break;
+        }
+        case 55: { // MOV moffs32, AL
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          this.writeMem8(op.imm >>> 0, regs[0] & 0xFF);
+          if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+            this.basicBlockInstrs += executed;
+            return executed;
+          }
+          break;
+        }
+        case 56: { // MOV moffs32, EAX
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          this.writeMem32(op.imm >>> 0, regs[0]);
+          if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+            this.basicBlockInstrs += executed;
+            return executed;
+          }
+          break;
+        }
+        case 57: { // 0xF6 /2 NOT r/m8, /3 NEG r/m8
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const v = (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea);
+          const res = (op.aluOp === 2) ? (~v & 0xFF) : this.aluSub(0, v, 0, 8);
+          if (op.mod === 3) this.setReg8(op.rm, res);
+          else {
+            this.writeMem8(ea, res);
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          }
+          break;
+        }
+        case 58: { // 0xF7 /2 NOT r/m32, /3 NEG r/m32
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const v = (op.mod === 3) ? (regs[op.rm] >>> 0) : this.readMem32(ea);
+          const res = (op.aluOp === 2) ? (~v >>> 0) : this.aluSub(0, v, 0, 32);
+          if (op.mod === 3) regs[op.rm] = res | 0;
+          else {
+            this.writeMem32(ea, res);
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          }
+          break;
+        }
+        case 59: { // 0xFE /0 INC r/m8, /1 DEC r/m8
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const v = (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea);
+          const res = (op.aluOp === 0) ? this.aluInc(v, 8) : this.aluDec(v, 8);
+          if (op.mod === 3) this.setReg8(op.rm, res);
+          else {
+            this.writeMem8(ea, res);
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          }
+          break;
+        }
+        case 60: { // LOOPNE / LOOPE / LOOP (32-bit address size)
+          const cnt = (regs[1] - 1) >>> 0;
+          regs[1] = cnt | 0;
+          let cond = cnt !== 0;
+          if (op.aluOp === 0xE0) cond = cond && ((this.eflags & FL_ZF) === 0);
+          else if (op.aluOp === 0xE1) cond = cond && ((this.eflags & FL_ZF) !== 0);
+          this.eip = (cond ? op.imm : op.nextEIP) >>> 0;
+          this.totalInstructions = baseInst + executed;
+          this.cycles = baseCycles + executed;
+          this.basicBlockInstrs += executed;
+          return executed;
+        }
+        case 61: // JECXZ
+          this.eip = (regs[1] === 0 ? op.imm : op.nextEIP) >>> 0;
+          this.totalInstructions = baseInst + executed;
+          this.cycles = baseCycles + executed;
+          this.basicBlockInstrs += executed;
+          return executed;
+        case 62: { // SETcc r/m8
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const val = this.evalCC(op.aluOp) ? 1 : 0;
+          if (op.mod === 3) this.setReg8(op.rm, val);
+          else {
+            this.writeMem8(ea, val);
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          }
+          break;
+        }
+        case 63: { // MOVSX r32, r/m8
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const v = (op.mod === 3) ? this.getReg8(op.rm) : this.readMem8(ea);
+          regs[op.reg] = (v << 24) >> 24;
+          break;
+        }
+        case 64: { // MOVSX r32, r/m16
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const v = (op.mod === 3) ? (regs[op.rm] & 0xFFFF) : this.readMem16(ea);
+          regs[op.reg] = (v << 16) >> 16;
+          break;
+        }
+        case 65: { // BSWAP r32
+          const v = regs[op.reg] >>> 0;
+          regs[op.reg] = (((v & 0xFF) << 24) | ((v & 0xFF00) << 8) | ((v >>> 8) & 0xFF00) | ((v >>> 24) & 0xFF)) | 0;
+          break;
+        }
+        case 66: { // BT/BTS/BTR/BTC r32, imm8 (mod === 3)
+          const bit = op.imm & 31;
+          const v = regs[op.rm] >>> 0;
+          const cf = (v >>> bit) & 1;
+          this.eflags = (this.eflags & ~FL_CF) | (cf ? FL_CF : 0);
+          if (op.aluOp === 5) regs[op.rm] = (v | (1 << bit)) | 0;
+          else if (op.aluOp === 6) regs[op.rm] = (v & ~(1 << bit)) | 0;
+          else if (op.aluOp === 7) regs[op.rm] = (v ^ (1 << bit)) | 0;
+          break;
+        }
+        case 67: { // IMUL r32, r/m32, imm
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const a = ((op.mod === 3) ? regs[op.rm] : this.readMem32(ea)) | 0;
+          const b = op.imm | 0;
+          const res = Math.imul(a, b);
+          regs[op.reg] = res;
+          const of = (a * b !== res) ? (FL_CF | FL_OF) : 0;
+          this.setArithFlagsFromMask(FL_CF | FL_OF, of);
+          break;
+        }
+        case 68: { // XCHG r32, r/m32
+          if (op.mod === 3) {
+            const t = regs[op.reg];
+            regs[op.reg] = regs[op.rm];
+            regs[op.rm] = t;
+          } else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            const v = this.readMem32(ea) | 0;
+            const r = regs[op.reg];
+            this.writeMem32(ea, r);
+            regs[op.reg] = v;
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          }
+          break;
+        }
+        case 69: { // 0x66 INC/DEC r16
+          const v = regs[op.reg] & 0xFFFF;
+          const res = (op.aluOp === 0) ? this.aluInc(v, 16) : this.aluDec(v, 16);
+          regs[op.reg] = (regs[op.reg] & ~0xFFFF) | (res & 0xFFFF);
+          break;
+        }
+        case 70: // 0x66 MOV r16, imm16
+          regs[op.reg] = (regs[op.reg] & ~0xFFFF) | (op.imm & 0xFFFF);
+          break;
+        case 71: { // 0x66 ALU r/m16, imm16
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const dst = (op.mod === 3) ? (regs[op.rm] & 0xFFFF) : this.readMem16(ea);
+          const res = this.execAluOp(op.aluOp, dst, op.imm & 0xFFFF, 16);
+          if (op.aluOp !== 7) {
+            if (op.mod === 3) regs[op.rm] = (regs[op.rm] & ~0xFFFF) | (res & 0xFFFF);
+            else {
+              this.writeMem16(ea, res);
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
+            }
+          }
+          break;
+        }
+        case 72: { // 0x66 TEST r/m16, r16
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const a = (op.mod === 3) ? (regs[op.rm] & 0xFFFF) : this.readMem16(ea);
+          this.updateLogicFlags(a & (regs[op.reg] & 0xFFFF), 16);
+          break;
+        }
+        case 73: { // 0x66 SHIFT r/m16, imm8/1/CL
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const cnt = (op.imm === -1) ? (regs[1] & 0x1F) : (op.imm & 0x1F);
+          const dst = (op.mod === 3) ? (regs[op.rm] & 0xFFFF) : this.readMem16(ea);
+          const res = this.execShiftOp(op.aluOp, dst, cnt, 16);
+          if (cnt !== 0) {
+            if (op.mod === 3) regs[op.rm] = (regs[op.rm] & ~0xFFFF) | (res & 0xFFFF);
+            else {
+              this.writeMem16(ea, res);
+              if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+                this.basicBlockInstrs += executed;
+                return executed;
+              }
+            }
+          }
+          break;
+        }
+        case 74: { // 0x66 MOV r/m16, imm16
+          if (op.mod === 3) regs[op.rm] = (regs[op.rm] & ~0xFFFF) | (op.imm & 0xFFFF);
+          else {
+            this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+            this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+            this.writeMem16(ea, op.imm & 0xFFFF);
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          }
+          break;
+        }
+        case 75: { // Non-REP string ops (MOVSB/MOVSD/STOSB/STOSD/LODSB/LODSD) in 32-bit flat mode
+          this.startEIP = op.startEIP >>> 0; this.startESP = regs[4]; this.eip = op.nextEIP >>> 0;
+          this.totalInstructions = baseInst + executed; this.cycles = baseCycles + executed;
+          const df = (this.eflags & FL_DF) !== 0;
+          const code = op.aluOp;
+          if (code === 0xAA) { // STOSB
+            const di = regs[7] >>> 0;
+            this.writeMem8(di, regs[0] & 0xFF);
+            regs[7] = (di + (df ? -1 : 1)) | 0;
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          } else if (code === 0xAB) { // STOSD
+            const di = regs[7] >>> 0;
+            this.writeMem32(di, regs[0]);
+            regs[7] = (di + (df ? -4 : 4)) | 0;
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          } else if (code === 0xAC) { // LODSB
+            const si = regs[6] >>> 0;
+            this.setReg8(0, this.readMem8(si));
+            regs[6] = (si + (df ? -1 : 1)) | 0;
+          } else if (code === 0xAD) { // LODSD
+            const si = regs[6] >>> 0;
+            regs[0] = this.readMem32(si) | 0;
+            regs[6] = (si + (df ? -4 : 4)) | 0;
+          } else if (code === 0xA4) { // MOVSB
+            const si = regs[6] >>> 0;
+            const di = regs[7] >>> 0;
+            const v = this.readMem8(si);
+            this.writeMem8(di, v);
+            const d = df ? -1 : 1;
+            regs[6] = (si + d) | 0;
+            regs[7] = (di + d) | 0;
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          } else if (code === 0xA5) { // MOVSD
+            const si = regs[6] >>> 0;
+            const di = regs[7] >>> 0;
+            const v = this.readMem32(si);
+            this.writeMem32(di, v);
+            const d = df ? -4 : 4;
+            regs[6] = (si + d) | 0;
+            regs[7] = (di + d) | 0;
+            if (pver[blkPage] !== blkVer || pver[blkLine1] !== blkVer1) {
+              this.basicBlockInstrs += executed;
+              return executed;
+            }
+          }
+          break;
+        }
       }
     }
 
+    this.eip = ops[n - 1].nextEIP >>> 0;
+    this.totalInstructions = baseInst + executed;
+    this.cycles = baseCycles + executed;
     this.basicBlockInstrs += executed;
     return executed;
   }
@@ -8634,11 +10734,28 @@ class X86CPU {
     if (this.pc.poweredOff) return false;
 
     const pc = this.pc;
-    if (pc.ps2.queue.length > 0 && !pc.ps2.outBufFull) {
+    if (pc.ps2.queue.length > 0 && !pc.ps2.hasOut) {
       pc.ps2.refillOutput(true);
     }
 
-    pc.pit.step(this.halted, (this.cr0 & CR0_PE) !== 0, this.totalInstructions);
+    // HLT skip-ahead: if halted with interrupts enabled and no IRQ/input pending,
+    // advance virtual time directly to the next scheduled device deadline.
+    if (
+      this.halted &&
+      !this.inhibitIrqOnce &&
+      (this.eflags & FL_IF) !== 0 &&
+      (pc.pic.master.irr & ~pc.pic.master.imr) === 0 &&
+      (pc.ps2.queue.length === 0 || pc.ps2.hasOut)
+    ) {
+      const nextDeadline = pc.getNextDeadlineCycle();
+      if (Number.isFinite(nextDeadline) && nextDeadline > this.cycles) {
+        this.cycles = nextDeadline;
+      } else {
+        this.cycles++;
+      }
+    }
+
+    pc.pit.step(this.cycles);
 
     if (!this.inhibitIrqOnce && (this.eflags & FL_IF) !== 0 && (pc.pic.master.irr & ~pc.pic.master.imr) !== 0) {
       if (pc.pic.hasPendingIRQ()) {
@@ -8657,6 +10774,7 @@ class X86CPU {
     this.inhibitIrqOnce = false;
 
     this.totalInstructions++;
+    this.cycles++;
 
     if (this.halted) {
       return true;
@@ -8677,12 +10795,23 @@ class X86CPU {
 
   runSteps(count) {
     const pc = this.pc;
+    const finalTarget = this.totalInstructions + (count | 0);
+    while (this.totalInstructions < finalTarget && !pc.poweredOff) {
+      const rem = finalTarget - this.totalInstructions;
+      this.runSlice(rem > 500000 ? 500000 : rem);
+    }
+    pc.checkRuntimeMilestones();
+  }
+
+  runSlice(count) {
+    const pc = this.pc;
     const targetInst = this.totalInstructions + (count | 0);
+    const pver = this.pageWriteVersion;
 
     while (this.totalInstructions < targetInst && !pc.poweredOff) {
       try {
         while (this.totalInstructions < targetInst && !pc.poweredOff) {
-          // Fast Basic-Block Cache path when in 32-bit flat mode with no pending interrupts/halt
+          // Fast Basic-Block Cache path with Direct Block Chaining when in 32-bit flat mode
           if (
             this.useBlockCache &&
             !this.halted &&
@@ -8695,48 +10824,119 @@ class X86CPU {
             this.segBase[SEG_DS] === 0 &&
             this.segBase[SEG_ES] === 0 &&
             this.segBase[SEG_SS] === 0 &&
+            this.cycles < pc.pit.nextIrq0Cycle &&
             ((this.eflags & FL_IF) === 0 || (pc.pic.master.irr & ~pc.pic.master.imr) === 0) &&
-            (pc.ps2.queue.length === 0 || pc.ps2.outBufFull)
+            (pc.ps2.queue.length === 0 || pc.ps2.hasOut)
           ) {
-            const eip = this.eip;
-            if ((eip & 0xFFF) <= 0xFD0) {
-              let physPC = -1;
-              if ((this.cr0 & CR0_PG) !== 0) {
-                const tlb = (this.cpl === 3) ? this.tlbReadUser : this.tlbReadSys;
-                const entry = tlb[eip >>> 12];
-                if (entry & 2) physPC = (entry & 0xFFFFF000) | (eip & 0xFFF);
-              } else if (pc.a20Enabled && (eip >>> 0) < this.ramSize) {
-                physPC = eip >>> 0;
-              }
-              if (physPC !== -1) {
-                const page = physPC >>> 6;
-                const ver = this.pageWriteVersion[page];
-                const slot = (physPC ^ (physPC >>> 12)) & 0xFFFF;
-                let blk = this.blockCache[slot];
-                if (!blk || blk.physPC !== physPC || blk.linPC !== (eip | 0) || blk.version !== ver || this.pageWriteVersion[blk.line1] !== blk.ver1) {
-                  blk = this.decodeBasicBlock(physPC, eip | 0, page, ver);
-                  this.blockCache[slot] = blk;
-                }
-                if (blk.ops !== null) {
-                  const k = blk.ops.length;
-                  if (
-                    this.totalInstructions + k <= targetInst &&
-                    pc.pit.instAccum + k < 1000000 &&
-                    ((this.totalInstructions & 0x3FFF) + k) < 0x4000
-                  ) {
-                    this.execBasicBlock(blk);
-                    continue;
+            const paging = (this.cr0 & CR0_PG) !== 0;
+            const tlbCode = paging ? ((this.cpl === 3) ? this.tlbReadUser : this.tlbReadSys) : null;
+            const maxCycles = pc.pit.nextIrq0Cycle;
+            let prevBlk = null;
+
+            while (this.totalInstructions < targetInst && this.cycles < maxCycles) {
+              const eip = this.eip;
+              let blk = null;
+
+              // Check direct block chain from previous block first (including cross-page CALL/JMP)
+              if (prevBlk !== null) {
+                const eipI32 = eip | 0;
+                if (prevBlk.chain0Lin === eipI32) {
+                  const c0 = prevBlk.chain0Blk;
+                  if ((!paging || tlbCode[c0.codePage] === c0.expectedTlb) && pver[c0.page] === c0.version && pver[c0.line1] === c0.ver1) {
+                    blk = c0;
+                  } else {
+                    prevBlk.chain0Lin = -1;
+                    prevBlk.chain0Blk = null;
+                  }
+                } else if (prevBlk.chain1Lin === eipI32) {
+                  const c1 = prevBlk.chain1Blk;
+                  if ((!paging || tlbCode[c1.codePage] === c1.expectedTlb) && pver[c1.page] === c1.version && pver[c1.line1] === c1.ver1) {
+                    blk = c1;
+                  } else {
+                    prevBlk.chain1Lin = -1;
+                    prevBlk.chain1Blk = null;
                   }
                 }
               }
+
+              if (blk === null) {
+                if ((eip & 0xFFF) > 0xFF0) break;
+                let physPC = -1;
+                let tlbEntry = -1;
+                if (paging) {
+                  tlbEntry = tlbCode[eip >>> 12];
+                  if (tlbEntry & 2) physPC = (tlbEntry & 0xFFFFF000) | (eip & 0xFFF);
+                } else if (pc.a20Enabled && (eip >>> 0) < this.ramSize) {
+                  physPC = eip >>> 0;
+                }
+                if (physPC === -1) break;
+
+                const page = physPC >>> 6;
+                const ver = pver[page];
+                const slot = (physPC ^ (physPC >>> 12)) & 0xFFFF;
+                blk = this.blockCache[slot];
+                if (!blk || blk.physPC !== physPC || blk.linPC !== (eip | 0) || blk.version !== ver || pver[blk.line1] !== blk.ver1) {
+                  blk = this.decodeBasicBlock(physPC, eip | 0, page, ver, tlbEntry);
+                  this.blockCache[slot] = blk;
+                } else {
+                  blk.expectedTlb = tlbEntry;
+                }
+                if (blk.ops === null) break;
+
+                // Link previous block to this block (same-page or cross-page)
+                if (prevBlk !== null) {
+                  if (prevBlk.chain0Lin === -1) {
+                    prevBlk.chain0Lin = eip | 0;
+                    prevBlk.chain0Blk = blk;
+                  } else if (prevBlk.chain1Lin === -1 && prevBlk.chain0Lin !== (eip | 0)) {
+                    prevBlk.chain1Lin = eip | 0;
+                    prevBlk.chain1Blk = blk;
+                  }
+                }
+              }
+
+              const k = blk.ops.length;
+              if (this.totalInstructions + k > targetInst || this.cycles + k > maxCycles) {
+                break;
+              }
+
+              const beforeMilestoneBucket = this.totalInstructions >>> 14;
+              const ran = this.execBasicBlock(blk);
+              if ((this.totalInstructions >>> 14) !== beforeMilestoneBucket) {
+                pc.checkRuntimeMilestones();
+              }
+              if (ran < k) {
+                // Self-modifying code invalidated block mid-execution
+                prevBlk = null;
+                break;
+              }
+              prevBlk = blk;
             }
+
+            if (this.totalInstructions >= targetInst || pc.poweredOff) break;
           }
 
-          if (pc.ps2.queue.length > 0 && !pc.ps2.outBufFull) {
+          if (pc.ps2.queue.length > 0 && !pc.ps2.hasOut) {
             pc.ps2.refillOutput(true);
           }
 
-          pc.pit.step(this.halted, (this.cr0 & CR0_PE) !== 0, this.totalInstructions);
+          // HLT skip-ahead: jump virtual time directly to next device deadline when idle with IF=1
+          if (
+            this.halted &&
+            !this.inhibitIrqOnce &&
+            (this.eflags & FL_IF) !== 0 &&
+            (pc.pic.master.irr & ~pc.pic.master.imr) === 0 &&
+            (pc.ps2.queue.length === 0 || pc.ps2.hasOut)
+          ) {
+            const nextDeadline = pc.getNextDeadlineCycle();
+            if (Number.isFinite(nextDeadline) && nextDeadline > this.cycles) {
+              this.cycles = nextDeadline;
+            } else {
+              this.cycles++;
+            }
+          }
+
+          pc.pit.step(this.cycles);
 
           if (!this.inhibitIrqOnce && (this.eflags & FL_IF) !== 0 && (pc.pic.master.irr & ~pc.pic.master.imr) !== 0) {
             if (pc.pic.hasPendingIRQ()) {
@@ -8755,6 +10955,7 @@ class X86CPU {
           this.inhibitIrqOnce = false;
 
           this.totalInstructions++;
+          this.cycles++;
 
           if (!this.halted) {
             this.stepInstruction();
@@ -8771,11 +10972,8 @@ class X86CPU {
         }
       }
     }
-    pc.checkRuntimeMilestones();
   }
 }
-
-
 // ============================================================================
 // Hummingbird x86 PC Emulator — Part 5: Browser UI, Debugger & Cartridge Maker
 // ============================================================================
@@ -8790,6 +10988,8 @@ if (typeof globalThis !== 'undefined') {
   globalThis.CMOSRTC = CMOSRTC;
   globalThis.PS2Controller8042 = PS2Controller8042;
   globalThis.PCIBus = PCIBus;
+  globalThis.DMA8237 = DMA8237;
+  globalThis.FDC82077AA = FDC82077AA;
 }
 
 // Browser-only UI initialization
@@ -9092,23 +11292,91 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       startEmulationLoop();
     }
 
+    // Optional WebAudio PC Speaker synthesis (active only in Real-time mode when port 0x61 bits 0 & 1 are set)
+    let audioCtx = null;
+    let spkOsc = null;
+    let spkGain = null;
+
+    function updatePCSpeaker() {
+      const spkOn = !pc.deterministic && isRunning && !pc.poweredOff && ((pc.pit.port61 & 0x03) === 0x03);
+      if (!spkOn) {
+        if (spkGain && audioCtx) {
+          spkGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.005);
+        }
+        return;
+      }
+      const reload = pc.pit.reload[2] || 65536;
+      const freq = 1193182 / reload;
+      if (freq < 20 || freq > 20000) {
+        if (spkGain && audioCtx) {
+          spkGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.005);
+        }
+        return;
+      }
+      if (!audioCtx && (window.AudioContext || window.webkitAudioContext)) {
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new Ctx();
+          spkOsc = audioCtx.createOscillator();
+          spkGain = audioCtx.createGain();
+          spkOsc.type = 'square';
+          spkGain.gain.value = 0;
+          spkOsc.connect(spkGain);
+          spkGain.connect(audioCtx.destination);
+          spkOsc.start();
+        } catch (err) {
+          audioCtx = null;
+        }
+      }
+      if (audioCtx && spkOsc && spkGain) {
+        if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+        spkOsc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.002);
+        spkGain.gain.setTargetAtTime(0.04, audioCtx.currentTime, 0.005);
+      }
+    }
+
+    let realTimeBaseWallMs = performance.now();
+    let realTimeBaseCycles = 0;
+
+    function syncRealTimeAnchor() {
+      realTimeBaseWallMs = performance.now();
+      realTimeBaseCycles = pc.cpu.cycles;
+    }
+
     function startEmulationLoop() {
       if (!loadedImageBytes) return;
       isRunning = true;
       btnPauseResume.textContent = 'Pause';
       lastPerfTime = performance.now();
       lastInstCount = pc.cpu.totalInstructions;
+      syncRealTimeAnchor();
 
       function frame(now) {
         if (!isRunning) return;
         const tStart = performance.now();
-        // Run in chunks of 100,000 instructions up to ~13ms frame budget
-        let stepsThisFrame = 0;
-        while ((performance.now() - tStart) < 13.5 && !pc.poweredOff) {
-          pc.cpu.runSteps(100000);
-          stepsThisFrame += 100000;
-          if (stepsThisFrame >= 2500000) break;
+        if (pc.deterministic) {
+          // Deterministic mode: run in chunks of 100,000 instructions up to ~13.5ms frame budget
+          let stepsThisFrame = 0;
+          while ((performance.now() - tStart) < 13.5 && !pc.poweredOff) {
+            pc.cpu.runSteps(100000);
+            stepsThisFrame += 100000;
+            if (stepsThisFrame >= 3500000) break;
+          }
+        } else {
+          // Real-time mode: virtual time strictly tracks the wall clock
+          const elapsedSec = Math.max(0, (now - realTimeBaseWallMs) / 1000);
+          const targetCycles = realTimeBaseCycles + Math.floor(elapsedSec * pc.cpuFreqHz);
+          while (pc.cpu.cycles < targetCycles && (performance.now() - tStart) < 13.5 && !pc.poweredOff) {
+            const rem = targetCycles - pc.cpu.cycles;
+            pc.cpu.runSteps(Math.min(100000, Math.max(1, rem)));
+          }
+          if (pc.cpu.cycles < targetCycles && !pc.poweredOff) {
+            pc.cpu.cycles = targetCycles;
+            pc.pit.step(pc.cpu.cycles);
+          }
         }
+
+        updatePCSpeaker();
 
         const dt = now - lastPerfTime;
         if (dt >= 250) {
@@ -9125,6 +11393,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         if (pc.poweredOff) {
           isRunning = false;
           btnPauseResume.textContent = 'Powered Off';
+          updatePCSpeaker();
           return;
         }
         animFrameId = requestAnimationFrame(frame);
@@ -9248,6 +11517,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     chkDeterministic.addEventListener('change', () => {
       pc.deterministic = chkDeterministic.checked;
       pc.cmos.deterministic = chkDeterministic.checked;
+      syncRealTimeAnchor();
+      updatePCSpeaker();
     });
 
     chkBlockCache.addEventListener('change', () => {
@@ -9366,6 +11637,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   });
 }
 
+})();
   </script>
 </body>
 </html>

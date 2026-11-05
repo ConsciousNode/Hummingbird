@@ -1,0 +1,25 @@
+
+                             GNU GRUB  version 2.12
+
+
+  *GNU/Linux
+   GNU (aka GNU/Hurd)
+   FreeBSD (or GNU/kFreeBSD), direct boot
+   FreeBSD (or GNU/kFreeBSD), via /boot/loader
+   NetBSD
+   OpenBSD
+   Microsoft Windows
+   Memtest86+
+   Change the colors
+
+
+
+
+
+
+      Use the   and   keys to select which entry is highlighted.
+      Press enter to boot the selected OS, `e' to edit the commands
+      before booting or `c' for a command-line.
+   The highlighted entry will be executed automatically in 30s.
+
+
