@@ -241,7 +241,7 @@ function main() {
 
   // Phase 1: Boot to full GUI desktop (Milestone 4, ~324.6M instructions)
   const stepChunk = 1000000;
-  const maxBootInst = 360000000;
+  const maxBootInst = 600000000;
   while (pc.cpu.totalInstructions < maxBootInst && !pc.milestoneMap.has('desktop_drawn')) {
     let toRun = stepChunk;
     if (nextCustomIdx < customSnapCounts.length) {

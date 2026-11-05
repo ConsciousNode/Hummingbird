@@ -231,7 +231,7 @@ function runKolibriSuite(core, imgRelPath, label, snapPrefix) {
   pc.loadFloppyImage(imgBytes);
 
   // Boot to Milestone 4 (Desktop drawn) in standard 1,000,000-instruction chunks
-  while (!pc.milestoneMap.has('desktop_drawn') && pc.cpu.totalInstructions < 360000000) {
+  while (!pc.milestoneMap.has('desktop_drawn') && pc.cpu.totalInstructions < 600000000) {
     pc.cpu.runSteps(1000000);
   }
 
@@ -545,14 +545,18 @@ function main() {
   console.log('====================================================================');
   const core = loadCoreFromHtml(HTML_PATH);
 
-  const rGrub = runGrubSuite(core);
+  // [Kehai audit 2026-11-05] The GRUB rescue floppy (GPLv3 binary) and the official nightly (carries
+  // blobs) are not in the repo; drop them into kolibrios/ to run those suites. Absent -> skipped.
+  const have = f => fs.existsSync(path.join(ROOT_DIR, 'kolibrios', f));
+  var skipped = { os: 'skipped (image not present)', instructions: 0, countdownSec: 0, countdownErrPct: 0, udCount: 0, unhandledPorts: 0, menuDurationSec: 0, msgBoardAddr: 0, mouseAddr: 0 };
+  const rGrub = have('grub-rescue-floppy.img') ? runGrubSuite(core) : (console.log('\n=== [1/4] GRUB: kolibrios/grub-rescue-floppy.img not present, skipped ==='), skipped);
   const rKolibriStudio = runKolibriSuite(
     core,
     'kolibrios/kolibri-hummingbird.img',
     '[2/4] KolibriOS Studio Floppy (commit 62b2b72)',
     'os-kolibri-hummingbird'
   );
-  const rKolibriOfficial = runKolibriSuite(
+  const rKolibriOfficial = !have('kolibri-0.7.7.0+8930.img') ? (console.log('\n=== [3/4] Official nightly not present, skipped ==='), skipped) : runKolibriSuite(
     core,
     'kolibrios/kolibri-0.7.7.0+8930.img',
     '[3/4] KolibriOS Official Nightly (0.7.7.0+8930)',
@@ -561,11 +565,11 @@ function main() {
   const rFdc = runFdcDmaBootTest(core);
 
   console.log('\n====================================================================');
-  console.log('OS Suite Summary: ALL 4 SUITES PASSED');
+  console.log('OS Suite Summary: ALL PRESENT SUITES PASSED');
   console.log('====================================================================');
-  console.log(`  1. ${rGrub.os}: inst=${rGrub.instructions.toLocaleString()}, 2s countdown=${rGrub.countdownSec.toFixed(4)}s (${rGrub.countdownErrPct.toFixed(2)}% err), #UD=${rGrub.udCount}, unhandledPorts=${rGrub.unhandledPorts}`);
+  if (rGrub === skipped) console.log('  1. GRUB: skipped'); else console.log(`  1. ${rGrub.os}: inst=${rGrub.instructions.toLocaleString()}, 2s countdown=${rGrub.countdownSec.toFixed(4)}s (${rGrub.countdownErrPct.toFixed(2)}% err), #UD=${rGrub.udCount}, unhandledPorts=${rGrub.unhandledPorts}`);
   console.log(`  2. ${rKolibriStudio.os}: 7/7 milestones, 2s menu=${rKolibriStudio.menuDurationSec.toFixed(3)}s, msgBoard=0x${rKolibriStudio.msgBoardAddr.toString(16).toUpperCase()}, mouse=0x${rKolibriStudio.mouseAddr.toString(16).toUpperCase()}, #UD=${rKolibriStudio.udCount}, unhandledPorts=${rKolibriStudio.unhandledPorts}`);
-  console.log(`  3. ${rKolibriOfficial.os}: 7/7 milestones, 2s menu=${rKolibriOfficial.menuDurationSec.toFixed(3)}s, msgBoard=0x${rKolibriOfficial.msgBoardAddr.toString(16).toUpperCase()}, mouse=0x${rKolibriOfficial.mouseAddr.toString(16).toUpperCase()}, #UD=${rKolibriOfficial.udCount}, unhandledPorts=${rKolibriOfficial.unhandledPorts}`);
+  if (rKolibriOfficial === skipped) console.log('  3. Official nightly: skipped'); else console.log(`  3. ${rKolibriOfficial.os}: 7/7 milestones, 2s menu=${rKolibriOfficial.menuDurationSec.toFixed(3)}s, msgBoard=0x${rKolibriOfficial.msgBoardAddr.toString(16).toUpperCase()}, mouse=0x${rKolibriOfficial.mouseAddr.toString(16).toUpperCase()}, #UD=${rKolibriOfficial.udCount}, unhandledPorts=${rKolibriOfficial.unhandledPorts}`);
   console.log(`  4. ${rFdc.os}: inst=${rFdc.instructions.toLocaleString()}, 1024B read + 512B write/read-back OK, #UD=${rFdc.udCount}, unhandledPorts=${rFdc.unhandledPorts}`);
 }
 

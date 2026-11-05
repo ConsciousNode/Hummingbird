@@ -1,0 +1,25 @@
+    APM 1.2                                                      GIT d50642c
+
+  KolibriOS v0.7.7.0+8930              [auto-build 29 Sep 2025 04:30, d50642c]
+
+  Hummingbird VBE (C) 2026
+  Version of VESA: 3.0
+  Press [abcde] to change settings, press [Enter] to continue booting
+   or wait  2 seconds to continue automatically
+
+  Current settings:
+   [a] Videomode: 1024x768x32
+   [b] Add disks visible by BIOS: off
+   [c] Duplicate debug output to the screen: off
+   [d] Start LAUNCHER after kernel is loaded: on
+   [e] Floppy image: real floppy
+
+
+
+  Default values were selected to match most configurations, but not all.
+  If the system does not boot, try to disable option [b]. If the system gets
+  stuck after booting, enable option [c], disable option [d] and take photo.
+
+  KolibriOS comes with ABSOLUTELY NO WARRANTY. See file COPYING for details
+  If you find any bugs, please report them at: https://board.kolibrios.org
+

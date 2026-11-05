@@ -84,3 +84,62 @@ node tests/headless.js            # boot the studio floppy, 7 milestones, snapsh
 node tests/headless.js path/to/kolibri-0.7.7.0+8930.img --out=/tmp/official   # the official nightly
 ```
 Regenerate the oracle on an x86 machine with `gcc-multilib`: see the header of `tests/cpu-oracle.js`.
+
+---
+
+# AUDIT: Hummingbird 1.1 (Argon's delivery)
+
+**Audited:** commit `00efd3c` (as delivered) · **Auditor:** Kehai Interim · **Date:** 2026-11-05
+**Verdict:** the timer rewrite is real and accurate, the FDC/DMA controller is genuine, and every suite reproduces.
+One real bug turned up, and fixing it is what finally puts the new floppy controller under a real OS driver.
+
+## Reproduced (this machine)
+
+| Check | Result |
+|---|---|
+| `tests/cpu-oracle.js` | 140/140 forms, 28,000/28,000 cases |
+| `tests/cpu.js` | 8/8 |
+| `tests/os-suite.js` | all 4 suites pass (before and after the fix below) |
+| GRUB countdown 29s → 27s | 1.9980 s virtual (−0.10%) |
+| Kolibri 2 s boot menu | 1.979 s (studio) / 1.980 s (official) |
+| `tests/determinism.js` | run-to-run and block-cache vs interpreter bit-identical (before and after the fix) |
+| `tests/bench.js` | cache ON: boot 65.4 MIPS, idle 33.9, app demo 35.5. Faster than REPORT's figures; the 45 MIPS boot target holds |
+
+## Is the timing measurement circular?
+
+No, on both counts.
+
+- **GRUB** reads time from the BIOS tick counter (INT 1Ah), which only moves when PIT channel 0 → IRQ0 → INT 08h runs. The test times GRUB's own on-screen countdown against virtual cycles. That checks the entire PIT → PIC → BIOS → guest chain.
+- **The Kolibri menu** window opens when the menu appears and closes when the *guest* calls VBE set-mode after its own timeout. It is not an emulator-side tick counter. (REPORT's wording, "counting 18 × 2 = 36 ticks", makes it sound circular; it isn't.)
+
+## The FDC is genuine
+
+The 82077AA hands sector bytes to the 8237. The DMA side honours page, address, count, direction (mode bits 2–3), decrement and terminal count. Nothing copies straight into RAM. CHS → LBA is right (C1/H0/R1 = LBA 36).
+
+## Bug found and fixed: CMOS said "no floppy drive"
+
+HARDWARE.md says CMOS register `0x10 = 0x40` (one 1.44 MB drive). The code set **`0x00`**. Consequences:
+
+1. **Neither KolibriOS kernel ever registered `/fd`,** so the new FDC was never exercised by a real driver. Over a whole boot, the FDC saw one DOR write and zero commands. Only the hand-assembled test boot sector used it.
+2. **The studio floppy crashed SEARCHAP.** The studio dmesg ended in `Process - forced terminate [SEARCHAP]` + `Page fault`, and QEMU doesn't do that on the same image (checked by dumping the kernel message board from QEMU RAM, with and without default IDE/CD devices).
+   - Hooking `raiseException` caught the fault in SEARCHAP's string copy (`lodsb/stosb/test/jnz`) reading off its memory at `ESI = 0x6007`.
+   - The cause is a latent SEARCHAP bug: `search_and_load_pointer_file_label` does `ecx = device_count − 1` and loops with `dec ecx; jnz`. With `/rd/1` as the *only* device, ecx starts at 0 and wraps.
+   - Real PCs with a floppy drive, and QEMU, always have `/fd` too, so it never fires there. (The official nightly's older SEARCHAP happens to survive. Worth reporting upstream as a one-line fix.)
+
+**Fix:** `regs[0x10] = 0x40`. Now:
+- both kernels' own floppy drivers run on the 82077AA: 68 commands per boot (sense interrupt, recalibrate, seek, DMA READ DATA), with correct result bytes;
+- SEARCHAP's output matches QEMU exactly;
+- the studio dmesg has no page fault.
+
+The floppy driver's motor/seek waits move the desktop later: about 374 M instructions (studio) and 366 M (official). The boot budget in `headless.js`, `bench.js` and `os-suite.js` was 360 M; it's raised to 600 M. Desktop instruction counts in REPORT.md are pre-fix.
+
+## Images kept out of the repo
+
+`os-suite.js` needs `kolibrios/grub-rescue-floppy.img` (a GPLv3 binary built for testing, not to be embedded) and the official nightly (it carries blobs). Both are now `.gitignore`d, and the suite skips them cleanly when absent. Drop them into `kolibrios/` to run the full suite.
+
+## Documentation drift (not fixed in place)
+
+- **GRUB row:** the menu shows GRUB's stock example entries (GNU/Linux, Hurd, OpenBSD…), not "KolibriOS" (`snapshots/grub-1-menu.txt`). `lsmod` is described as 31 modules in REPORT and as 50 in the test's log line; the test only checks three names.
+- **FDC row:** REPORT describes C0/H0/S2–3 → `0x1000`, write `0x45` to S4, readback `0x2200`, 297 instructions. The test actually does C1/H0/R1–2 → `0x8000`, write `0xC5` to R3, readback `0x8400`, inside a 20,000-step run.
+- **Determinism numbers:** REPORT's cycle counts and hashes (e.g. 300,326,845 at 50 M) don't match this build's (544,060,638 at 50 M, before the fix). The property holds; the quoted numbers are stale.
+- **Bench row 3:** REPORT says +120 M "TINYPAD + CALC+". `bench.js` also runs TETRIS (and SHELL when present): +155 M here.

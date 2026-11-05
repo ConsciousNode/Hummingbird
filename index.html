@@ -2193,7 +2193,7 @@ class CMOSRTC {
     this.regs[0x0D] = 0x80; // Status Reg D (Bit 7 = 1: CMOS battery power good!)
 
     // Register 0x10: Floppy drive type.
-    this.regs[0x10] = 0x00;
+    this.regs[0x10] = 0x40; // [Kehai audit 2026-11-05] was 0x00 (no drive) despite HARDWARE.md; 0x40 = one 1.44 MB 3.5" drive A:
 
     // Base memory 640 KB
     this.regs[0x15] = 0x80;

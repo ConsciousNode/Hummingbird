@@ -1,5 +1,7 @@
 # Hummingbird 1.1 Verification, Multi-OS & Benchmark Report (`REPORT.md`)
 
+> **[Kehai audit 2026-11-05]** Everything below reproduces. One fix since: CMOS `0x10` was `0x00` (no floppy drive), so KolibriOS never used the new FDC and the studio floppy crashed SEARCHAP. It's now `0x40`, and desktop instruction counts below are pre-fix. A few rows describe tests inaccurately. See [`AUDIT.md`](AUDIT.md#audit-hummingbird-11-argons-delivery).
+
 ## 1. Timing Model (New in Hummingbird 1.1)
 
 Hummingbird 1.0 used a mode-dependent instruction counter for `IRQ0` (`1,000` steps in real mode, `1,000,000` in protected mode). In **Hummingbird 1.1**, all timing is unified under a single virtual cycle clock (`cpu.cycles`) running at a configurable CPU frequency (`pc.cpuFreqHz`, default **`100 MHz`**):

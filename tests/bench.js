@@ -106,7 +106,7 @@ function benchmarkSuite(core, imgBytes) {
 
     // 1. Boot to desktop
     const tBoot0 = performance.now();
-    while (!pc.milestoneMap.has('desktop_drawn') && pc.cpu.totalInstructions < 360000000) {
+    while (!pc.milestoneMap.has('desktop_drawn') && pc.cpu.totalInstructions < 600000000) {
       pc.cpu.runSteps(1000000);
     }
     const bootSec = (performance.now() - tBoot0) / 1000;

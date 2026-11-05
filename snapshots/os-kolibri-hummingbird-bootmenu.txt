@@ -1,0 +1,25 @@
+    APM 1.2
+
+  KolibriOS v0.7.7.0
+
+  Hummingbird VBE (C) 2026
+  Version of VESA: 3.0
+  Press [abcde] to change settings, press [Enter] to continue booting
+   or wait  2 seconds to continue automatically
+
+  Boot options:
+   [a] Video mode...............1024x768x32
+   [b] BIOS disks...............off
+   [c] On-screen debug..........off
+   [d] Start LAUNCHER...........on
+   [e] Boot from................real floppy
+
+
+
+  Default values were selected to match most configurations, but not all.
+  If the system does not boot, try to disable option [b]. If the system gets
+  stuck after booting, enable option [c], disable option [d] and take photo.
+
+  KolibriOS comes with ABSOLUTELY NO WARRANTY. See file COPYING for details
+  If you find any bugs, please report them at: https://git.kolibrios.org
+
