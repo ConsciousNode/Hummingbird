@@ -4339,6 +4339,9 @@ class HummingbirdPC {
             const imgIdx = byteOffset + i;
             this.ram[memAddr + i] = (imgIdx < this.floppyImage.length) ? this.floppyImage[imgIdx] : 0;
           }
+          // [Kehai audit 2026-11-11] the BIOS writes RAM directly here; bump the code-line versions so any
+          // cached decoded block over this range is re-decoded (DMA and CPU stores already do this).
+          this.cpu.markPhysWritten(memAddr, byteCount);
         } else {
           for (let i = 0; i < byteCount; i++) {
             const imgIdx = byteOffset + i;
@@ -4542,6 +4545,7 @@ class HummingbirdPC {
           this.ram[d] = (s < this.ramSize) ? this.ram[s] : 0;
         }
       }
+      this.cpu.markPhysWritten(dstAddr >>> 0, byteCount); // [Kehai audit 2026-11-11] INT 15h AH=87h block move
       cpu.setReg8(REG_EAX + 4, 0x00); // AH = 0 (Success)
       this.setStackCF(0);
       return;
@@ -8960,6 +8964,13 @@ class X86CPU {
     return out;
   }
 
+  // [Kehai audit 2026-11-11] invalidate decoded blocks after a host-side (BIOS) bulk write to RAM.
+  markPhysWritten(addr, len) {
+    if (len <= 0) return;
+    const last = Math.min(this.ramSize, addr + len) - 1;
+    for (let l = addr >>> 6; l <= (last >>> 6); l++) this.pageWriteVersion[l]++;
+  }
+
   decodeBasicBlock(physStart, linStart, page, version, expectedTlb = -1) {
     const ram = this.ram;
     const maxP = ((physStart & 0xFFFFF000) + 0x1000) >>> 0;
@@ -9341,6 +9352,10 @@ class X86CPU {
         break;
       }
 
+      // [Kehai audit 2026-11-11, found by Pixie's CLUMP bots] Reuse checks and the mid-run SMC abort only
+      // compare the versions of a block's first and last 64-byte lines. Keep every block within two lines so
+      // a write to a middle line can't go unnoticed: drop an instruction that would end in a third line.
+      if (((p - 1) >>> 6) > (physStart >>> 6) + 1) { p = startP; break; }
       ops.push(op);
       curEIP = op.nextEIP;
       if (isTerm) break;

@@ -143,3 +143,36 @@ The floppy driver's motor/seek waits move the desktop later: about 374 M instruc
 - **FDC row:** REPORT describes C0/H0/S2–3 → `0x1000`, write `0x45` to S4, readback `0x2200`, 297 instructions. The test actually does C1/H0/R1–2 → `0x8000`, write `0xC5` to R3, readback `0x8400`, inside a 20,000-step run.
 - **Determinism numbers:** REPORT's cycle counts and hashes (e.g. 300,326,845 at 50 M) don't match this build's (544,060,638 at 50 M, before the fix). The property holds; the quoted numbers are stale.
 - **Bench row 3:** REPORT says +120 M "TINYPAD + CALC+". `bench.js` also runs TETRIS (and SHELL when present): +155 M here.
+
+## Round 2 (2026-11-11): questions from Pixie's CLUMP bots
+
+Pixie's Grok bots (the CLUMP room: Res Bina, Squabble, ファイア, Bauhaus, Kebai, Lapgoat) read the code and found a real bug. Thank you.
+
+**Bug fixed: stale decoded blocks after a write to a middle line.** Squabble's finding. A decoded block stops at 32 ops or the end of its 4 KB page, but nothing limited how many 64-byte lines it spans. The reuse checks and the mid-run self-modifying-code abort compare only the write versions of a block's first and last lines. So when a block covers three or more lines, a write to a middle line went unnoticed, and the next run executed stale decoded ops.
+- Reproduced with a 26 × `add eax, imm32` block (130 bytes, three lines): after rewriting instruction 14's immediate, the cached run still produced 26 where the interpreter produced 1025.
+- **Fix:** a block now ends before any instruction that would finish in a third line, so the two-line check is complete. Blocks average 2.6–3.5 instructions, so almost none are affected. `bench.js` is unchanged within noise (boot 50.5 vs 51.7 MIPS, idle 27.6 vs 28.1, on a busy machine).
+
+**Bug fixed: BIOS bulk writes didn't invalidate decoded blocks.** Found while answering Kebai's question.
+- CPU stores and 8237 DMA go through `physWrite*`, which bumps the line versions. Kebai's case, DMA, was already safe.
+- The JavaScript BIOS writes RAM directly in two bulk paths: `INT 13h AH=02h` (sector reads) and `INT 15h AH=87h` (extended-memory block moves). Code loaded over a cached block that way ran stale.
+- **Fix:** both now call a new `markPhysWritten(addr, len)`.
+- The BIOS's other direct writes are BIOS-owned data: the BIOS data area, VBE info blocks and text VRAM, all written at power-on or into data structures, never over code.
+
+**New test: `tests/block-cache-smc.js`.** It covers writes to the first, middle and last line, a BIOS sector read, and a BIOS block move. It fails 3 cases on 1.1 and passes after the fix.
+
+**`tests/determinism.js` now hashes the whole machine.** Asked by Res Bina and ファイア. Each checkpoint now also hashes:
+- all of RAM;
+- the x87 state (registers, raw 80-bit bytes, tags, control/status words, top of stack, last instruction and operand pointers);
+- CR0, CR2, CR3 and CR4, CPL and the segment caches;
+- the primitive fields of the PIT, PIC, CMOS, 8042, DMA, FDC and VGA.
+
+This holds for run against run and for block cache against interpreter. The oracle still doesn't cover x87; that's noted in `NOTES-1.2.md`.
+
+Rerun after both fixes:
+
+| Test | Result |
+|---|---|
+| `tests/cpu-oracle.js` | 140/140, 28,000/28,000 |
+| `tests/cpu.js` | 8/8 |
+| `tests/determinism.js`, with the full-state hash | passes |
+| `tests/os-suite.js` | passes all present suites. The GRUB and official images weren't on this machine, so those two were skipped |

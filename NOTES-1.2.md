@@ -20,7 +20,29 @@ Real guests: **two KolibriOS floppies** (the studio's blob-free build and the of
 ## Small fixes (found by the DOS test)
 
 1. **Seed the BIOS tick counter from the RTC at power-on.** DOS took the correct date (from INT 1Ah AH=04) but showed the time as 12:00:01 a.m. A real BIOS POST sets `0040:006C` from the CMOS time. In deterministic mode, use the deterministic epoch.
-2. **Identify the writes to ports `0x2F2–0x2F7`.** DOS 4.0 makes one OUT to each during boot. It's the first guest to break the "0 unhandled ports" streak. Find what it's probing (it sits next to COM2 at `0x2F8`) and answer the way absent hardware really answers, rather than adding it to an ignore list.
+2. **The writes to ports `0x2F2–0x2F7`: identified (2026-11-11).** Lapgoat asked whether this was a COM2 probe or an emulator decode bug. It's neither. In `SYSINIT1.ASM` (MS-DOS 4.0, the "J.K. 9/29/86" block), IO.SYS's relocated SYSINIT issues a **global rearm for IBM shared-interrupt adapters** after loading each device driver: `mov al,0FFh / mov dx,2F2h / out dx,al / (inc dx / out dx,al) ×5`. Each port rearms one interrupt level, 2 to 7. It's write-only and any value works, so absent hardware simply ignores it. The trace matches the source byte for byte: six OUTs of `FF`, CS base `0x9BD20`, IP `0x1326`–`0x1330`, and no reads anywhere near COM2.
+   - **Hummingbird is under-reporting here.** The same code then checks the BIOS model byte at `F000:FFFE` for `FCh` (AT class) or calls `INT 15h AH=C0h` (get system configuration). If a second 8259 is present, it also rearms levels 10–15 at `0x6F2–0x6F7`. Our model byte reads `00` and `C0h` isn't implemented, so DOS takes the "old ROM" path. A real Pentium BIOS would make DOS write `0x6F2`–`0x6F7` too.
+   - **Fix:** set the model byte to `FCh` and implement `INT 15h AH=C0h` with a configuration table (feature byte 1 = second 8259 + RTC, `0x60`). Treat writes to `0x2F2–0x2F7` and `0x6F2–0x6F7` as the no-ops they are on a machine without shared-interrupt adapters. Rerun GRUB and both KolibriOS floppies afterwards, since the BIOS identity changes.
+
+## Speed: a TLB per address space (Res Bina's idea, measured 2026-11-11)
+
+The idle desktop runs at about half boot's MIPS. Measured on the studio floppy:
+- 39.8 page walks per 1,000 instructions on the idle desktop, against 5.85 during boot (6.8× more);
+- 1,156 walks per CR3 switch;
+- only **2 distinct CR3 values** in 50 M idle instructions.
+
+So almost every walk refills a TLB that was just thrown away. Proposal: on a CR3 switch, save the filled entries (the dirty list already records them) under the old CR3, and restore them when that CR3 comes back. Copying about 1k entries is far cheaper than 1k page walks.
+
+The guest must never be able to tell. Invariants:
+- **Page-table edits.** A write to any page-table or page-directory page used by a cached snapshot must invalidate it. OSes edit an inactive address space's PTEs without `INVLPG` and rely on the CR3 load to flush, which is architecturally guaranteed on the i586. Track it with a per-page "walked as a page table" flag and a generation counter, excluding the emulator's own A/D-bit updates.
+- **Dirty bit.** Only cache write-enabled entries whose D bit is already set, as the TLB does now.
+- **Global invalidation.** CR0.PG, CR0.WP or CR4.PSE changes drop every snapshot.
+- **Reused CR3 values.** A freed page directory reused for a new process is covered by the page-table write tracking.
+- **Proof.** `determinism.js`, now hashing full state, must stay bit-identical with this on and off.
+
+## x87 coverage
+
+The CPU oracle covers integer forms only. Add x87 forms (arithmetic, compare/`FSTSW`, `FIST`/`FLD` conversions, transcendentals with SDM tolerances, `FSAVE`/`FRSTOR` round trips), recorded on real hardware the same way. Exceptions and precision/rounding-control combinations too. Asked by ファイア and Res Bina.
 
 ## Bigger steps, in order
 
