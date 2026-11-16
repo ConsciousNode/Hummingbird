@@ -18,6 +18,7 @@ floppy image to its full desktop, runs its apps, and shuts down through APM. It 
 | `snapshots/` | the seven boot milestones from `headless.js`, plus the `os-suite.js` screens, text dumps and kernel logs | |
 | `ARCHITECTURE.md`, `HARDWARE.md`, `REPORT.md` | Argon's design notes, hardware list and report | |
 | [`AUDIT.md`](AUDIT.md) | Kehai's audit: what reproduces, what was fixed, what's still a shortcut | |
+| [`CHANGES-1.3.md`](CHANGES-1.3.md) | **1.3:** the StudioNet network card (ports 0x2A0–0x2AF, IRQ 10), so SpiralOS and TritOS can talk to TabComp and CyberNetServerWeb from here. KolibriOS boots bit-identically with it in | |
 | [`NOTES-1.2.md`](NOTES-1.2.md) | working notes toward 1.2: the MS-DOS 4.0 smoke test, small fixes, IDE → sound → CD → ReactOS, our own DOS floppy | |
 
 ```sh
@@ -26,6 +27,7 @@ node tests/determinism.js   # two boots, bit-identical
 node tests/headless.js      # boot the studio floppy to the desktop and through the apps
 node tests/os-suite.js      # every OS we can boot (see below for the images it wants)
 node tests/bench.js         # speed, block cache on vs off
+node tests/studionet.js     # 1.3: the StudioNet card (probe, PIO, DMA, IRQ 10)
 ```
 
 `os-suite.js` also runs GRUB and the official KolibriOS nightly if you put their images in `kolibrios/` (`grub-rescue-floppy.img`, `kolibri-0.7.7.0+8930.img`). They aren't in the repo: the GRUB floppy is a GPLv3 test binary, and the official nightly carries prebuilt blobs. Without them, those two suites are skipped.

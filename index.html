@@ -3624,6 +3624,340 @@ class FDC82077AA {
   }
 }
 
+  // [Kehai 2026-11-16, Hummingbird 1.3] StudioNet NIC lifted verbatim from
+  // ConsciousNode/SpiralOS hummingbird.html lines 3729-4058 (SpiralOS 1.5, commit f9d17f2).
+  // Host-side wiring differs only in having no strictBios gate (Hummingbird has no strictBios mode).
+
+  // ==========================================================================
+  // StudioNet Virtual Network Controller + In-Memory Switch + BroadcastChannel
+  // + Sonder Deterministic Procedural Hypertext Engine (§5)
+  //
+  // Provenance: The Sonder Procedural Gateway engine below is an original
+  // deterministic procedural hypertext generator created by ConsciousNode
+  // SoftWorks for SpiralOS 1.1, inspired by early 1990s hyperCard/Gopher/WWW
+  // procedural worldbuilders. It hashes the request path with 32-bit FNV-1a,
+  // seeds a deterministic xorshift32 PRNG, selects one of 4 distinct document
+  // templates (Atlas, Chronicle, Schematic, Archive), and synthesizes
+  // interconnected hypertext pages with inline bitmap <img src=...> tags.
+  // ==========================================================================
+  function generateSonderProceduralPage(rawPath) {
+    let path = (rawPath || "/index").trim();
+    if (!path.startsWith("/")) path = "/" + path;
+    // 32-bit FNV-1a hash of the normalized path
+    let h = 0x811C9DC5;
+    for (let i = 0; i < path.length; i++) {
+      h ^= path.charCodeAt(i) & 0xFF;
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    let state = (h || 0x1991B007) >>> 0;
+    const nextRand = () => {
+      state ^= (state << 13) >>> 0;
+      state ^= (state >>> 17) >>> 0;
+      state ^= (state << 5) >>> 0;
+      return (state >>> 0);
+    };
+    const pick = (arr) => arr[nextRand() % arr.length];
+
+    const ADJ = ["Aether", "Helix", "Ceres", "Kyoto", "Harmonic", "Sub-Lunar", "Cobalt", "Phosphor", "Phase-Locked", "Isochronous", "Vortex", "Lattice"];
+    const NOUN = ["Resonator", "Observatory", "Chronicle", "Switchyard", "Relay", "Cartridge", "Manifold", "Synchrotron", "Telemetry", "Codex", "Archive", "Beacon"];
+    const VERB = ["stabilizes", "modulates", "transcribes", "routes", "illuminates", "synchronizes", "anchors", "Indexes"];
+    const LOC = ["Sector 7-G", "Station Oberon", "Node Zürich-88", "Bay 14", "Orbital Ring III", "Vault 0x00FE", "Sub-Net Delta", "Mount Hiei Lab"];
+    const SLUGS = ["/atlas", "/chronicle", "/schematic", "/archive", "/beacon", "/lattice", "/observatory", "/codex", "/relay", "/synchrotron"];
+
+    let templateId = h % 4;
+    if (path.startsWith("/atlas")) templateId = 0;
+    else if (path.startsWith("/chronicle")) templateId = 1;
+    else if (path.startsWith("/schematic")) templateId = 2;
+    else if (path.startsWith("/archive")) templateId = 3;
+    const codeHex = (h & 0xFFFF).toString(16).toUpperCase().padStart(4, "0");
+    const freqMHz = 10 + (nextRand() % 890);
+    const driftPpm = (nextRand() % 95) + 5;
+    const adj1 = pick(ADJ), noun1 = pick(NOUN);
+    const adj2 = pick(ADJ), noun2 = pick(NOUN);
+    const loc1 = pick(LOC), verb1 = pick(VERB);
+    let link1 = pick(SLUGS);
+    if (link1 === path) link1 = SLUGS[(h + 1) % SLUGS.length];
+    const link2 = pick(SLUGS), link3 = "/node-" + ((nextRand() % 900) + 100);
+    const imgPath = (h & 1) ? "/art/spiral.pic" : "/art/prism.pic";
+
+    if (templateId === 0) {
+      // Template 0: Aether Atlas & Topological Survey
+      return (
+        "<h1>[ATLAS] " + adj1 + " (" + path + ")</h1>\n" +
+        "<p>ID:SND-" + codeHex + " " + loc1 + " " + freqMHz + "MHz</p>\n" +
+        "<img src='" + imgPath + "'>\n" +
+        "<p>" + adj2 + " " + noun2 + " " + verb1 + " (" + driftPpm + "ppm).</p>\n" +
+        "<p><a href='" + link1 + "'>Wing</a> <a href='" + link2 + "'>Log</a> <a href='" + link3 + "'>#" + codeHex + "</a></p>"
+      );
+    } else if (templateId === 1) {
+      // Template 1: 1991 Helix Chronicle & Historical Dispatch
+      const year = 1984 + (nextRand() % 12);
+      return (
+        "<h1>[CHRONICLE " + year + "] (" + path + ")</h1>\n" +
+        "<p>Ref:CHR-" + codeHex + " @ " + loc1 + "</p>\n" +
+        "<img src='" + imgPath + "'>\n" +
+        "<p>" + adj2 + " " + noun2 + " " + verb1 + " @ " + freqMHz + "MHz.</p>\n" +
+        "<p><a href='" + link1 + "'>Dossier</a> <a href='" + link2 + "'>Notes</a> <a href='" + link3 + "'>#" + codeHex + "</a></p>"
+      );
+    } else if (templateId === 2) {
+      // Template 2: Hardware Schematic & Telemetry Matrix
+      return (
+        "<h1>[SCHEMATIC] (" + path + ")</h1>\n" +
+        "<p>HW-" + codeHex + " | " + freqMHz + "MHz | " + loc1 + "</p>\n" +
+        "<img src='" + imgPath + "'>\n" +
+        "<p>CH0=" + adj2 + " CH1=" + noun1 + " (" + driftPpm + "us)</p>\n" +
+        "<p><a href='" + link1 + "'>Spec</a> <a href='" + link2 + "'>Map</a> <a href='" + link3 + "'>#" + codeHex + "</a></p>"
+      );
+    } else {
+      // Template 3: ConsciousNode Archive & Signal Ledger
+      return (
+        "<h1>[ARCHIVE] Vault " + codeHex + " (" + path + ")</h1>\n" +
+        "<p>Locus: " + loc1 + " | " + driftPpm + "dB</p>\n" +
+        "<img src='" + imgPath + "'>\n" +
+        "<p>" + adj2 + " " + noun2 + " " + verb1 + " SPIR.</p>\n" +
+        "<p><a href='" + link1 + "'>LedgerA</a> <a href='" + link2 + "'>LedgerB</a> <a href='" + link3 + "'>#" + codeHex + "</a></p>"
+      );
+    }
+  }
+
+  if (typeof globalThis !== "undefined") {
+    globalThis.generateSonderProceduralPage = generateSonderProceduralPage;
+  }
+
+  if (typeof globalThis !== "undefined" && !globalThis.__STUDIONET_SWITCH) {
+    globalThis.__STUDIONET_SWITCH = {
+      nics: new Set(),
+      packetLog: [],
+      register(nic) { this.nics.add(nic); },
+      unregister(nic) { this.nics.delete(nic); },
+      route(srcNic, frameU8) {
+        const copy = new Uint8Array(frameU8);
+        const dstNode = copy.length >= 2 ? (copy[0] | (copy[1] << 8)) : 0xFFFF;
+        const srcNode = copy.length >= 4 ? (copy[2] | (copy[3] << 8)) : srcNic.nodeId;
+        this.packetLog.push({
+          time: Date.now(),
+          srcNode,
+          dstNode,
+          proto: copy.length >= 5 ? copy[4] : 0,
+          len: copy.length,
+          bytes: copy
+        });
+        if (this.packetLog.length > 256) this.packetLog.shift();
+        for (const nic of this.nics) {
+          if (nic !== srcNic) {
+            if (dstNode === 0xFFFF || dstNode === 0x0000 || nic.nodeId === dstNode || nic.promiscuous) {
+              nic._enqueueRx(copy);
+            }
+          }
+        }
+        // Built-in Sonder Procedural Internet Gateway (Station 0x00FE = "sonder.gw")
+        if (dstNode === 0x00FE && copy.length >= 16) {
+          const proto = copy[4];
+          const srcPort = copy[6] | (copy[7] << 8);
+          const dstPort = copy[8] | (copy[9] << 8);
+          const seqNum = copy[10] | (copy[11] << 8);
+          const reqPayload = new TextDecoder().decode(copy.subarray(16));
+          let path = "/index";
+          const m = reqPayload.match(/GET\s+([^\s\0]+)/);
+          if (m) path = m[1];
+          const body = generateSonderProceduralPage(path);
+          const bodyBytes = new TextEncoder().encode(body);
+          const maxBody = Math.min(480, bodyBytes.length);
+          const resp = new Uint8Array(16 + maxBody);
+          resp[0] = srcNode & 0xFF; resp[1] = (srcNode >> 8) & 0xFF;
+          resp[2] = 0xFE; resp[3] = 0x00;
+          resp[4] = proto;
+          resp[5] = 0x06; // ACK | PSH
+          resp[6] = dstPort & 0xFF; resp[7] = (dstPort >> 8) & 0xFF;
+          resp[8] = srcPort & 0xFF; resp[9] = (srcPort >> 8) & 0xFF;
+          resp[10] = 1; resp[11] = 0;
+          resp[12] = (seqNum + 1) & 0xFF; resp[13] = ((seqNum + 1) >> 8) & 0xFF;
+          resp[14] = maxBody & 0xFF; resp[15] = (maxBody >> 8) & 0xFF;
+          resp.set(bodyBytes.subarray(0, maxBody), 16);
+          srcNic._enqueueRx(resp);
+        }
+      }
+    };
+  }
+
+  class StudioNetNIC {
+    constructor(host, defaultNodeId = 0x0101) {
+      this.host = host;
+      this.defaultNodeId = defaultNodeId & 0xFFFF;
+      this.nodeId = this.defaultNodeId;
+      this.promiscuous = false;
+      this.irqEnabled = false;
+      this.dmaAddr = 0;
+      this.txLen = 0;
+      this.lastRxLen = 0;
+      this.txCount = 0;
+      this.rxCount = 0;
+      this.rxQueue = [];
+      this.pioTxBuf = [];
+      this.pioRxBuf = [];
+      this.pioRxIdx = 0;
+      this.instanceId = Math.random().toString(36).slice(2);
+      this.bc = null;
+      if (typeof BroadcastChannel !== "undefined" && typeof process === "undefined") {
+        try {
+          this.bc = new BroadcastChannel("studionet-v1");
+          this.bc.onmessage = (ev) => {
+            const d = ev && ev.data;
+            if (!d || d.srcId === this.instanceId || !d.frame) return;
+            const u8 = new Uint8Array(d.frame);
+            const dstNode = u8.length >= 2 ? (u8[0] | (u8[1] << 8)) : 0xFFFF;
+            if (dstNode === 0xFFFF || dstNode === 0x0000 || dstNode === this.nodeId || this.promiscuous) {
+              this._enqueueRx(u8);
+            }
+          };
+        } catch (e) {}
+      }
+      if (typeof globalThis !== "undefined" && globalThis.__STUDIONET_SWITCH) {
+        globalThis.__STUDIONET_SWITCH.register(this);
+      }
+    }
+
+    reset() {
+      this.nodeId = this.defaultNodeId;
+      this.irqEnabled = false;
+      this.dmaAddr = 0;
+      this.txLen = 0;
+      this.lastRxLen = 0;
+      this.txCount = 0;
+      this.rxCount = 0;
+      this.rxQueue = [];
+      this.pioTxBuf = [];
+      this.pioRxBuf = [];
+      this.pioRxIdx = 0;
+    }
+
+    _enqueueRx(frameU8) {
+      if (this.rxQueue.length >= 128) this.rxQueue.shift();
+      this.rxQueue.push(new Uint8Array(frameU8));
+      this.rxCount = (this.rxCount + 1) | 0;
+      if (this.host && this.host.pic && this.irqEnabled) {
+        this.host.pic.raiseIRQ(10);
+      }
+      if (this.host && this.host._syncStudioNetMMIO) {
+        this.host._syncStudioNetMMIO();
+      }
+    }
+
+    sendFrame(frameU8) {
+      if (!frameU8 || frameU8.length === 0) return 0;
+      const copy = new Uint8Array(frameU8.subarray(0, Math.min(512, frameU8.length)));
+      this.txCount = (this.txCount + 1) | 0;
+      if (typeof globalThis !== "undefined" && globalThis.__STUDIONET_SWITCH) {
+        globalThis.__STUDIONET_SWITCH.route(this, copy);
+      }
+      if (this.bc) {
+        try {
+          this.bc.postMessage({ srcId: this.instanceId, frame: Array.from(copy) });
+        } catch (e) {}
+      }
+      if (this.host && this.host._syncStudioNetMMIO) {
+        this.host._syncStudioNetMMIO();
+      }
+      return copy.length;
+    }
+
+    recvFrame() {
+      if (this.rxQueue.length === 0) {
+        this.lastRxLen = 0;
+        return null;
+      }
+      const f = this.rxQueue.shift();
+      this.lastRxLen = f.length;
+      if (this.host && this.host._syncStudioNetMMIO) {
+        this.host._syncStudioNetMMIO();
+      }
+      return f;
+    }
+
+    // Hummingbird I/O Port Interface (0x02A0 .. 0x02AF)
+    portRead(port) {
+      const off = port - 0x02A0;
+      switch (off) {
+        case 0x00: return 0x53; // 'S'
+        case 0x01: return 0x4E; // 'N'
+        case 0x02: return (this.rxQueue.length > 0 ? 0x01 : 0x00) | 0x04 | (this.irqEnabled ? 0x08 : 0x00);
+        case 0x03: return 0x00;
+        case 0x04: return this.nodeId & 0xFF;
+        case 0x05: return (this.nodeId >>> 8) & 0xFF;
+        case 0x06: {
+          const l = this.lastRxLen || (this.rxQueue.length > 0 ? this.rxQueue[0].length : 0);
+          return l & 0xFF;
+        }
+        case 0x07: {
+          const l = this.lastRxLen || (this.rxQueue.length > 0 ? this.rxQueue[0].length : 0);
+          return (l >>> 8) & 0xFF;
+        }
+        case 0x08: return this.dmaAddr & 0xFF;
+        case 0x09: return (this.dmaAddr >>> 8) & 0xFF;
+        case 0x0A: return (this.dmaAddr >>> 16) & 0xFF;
+        case 0x0B: return (this.dmaAddr >>> 24) & 0xFF;
+        case 0x0C: {
+          if (this.pioRxIdx < this.pioRxBuf.length) {
+            return this.pioRxBuf[this.pioRxIdx++] & 0xFF;
+          }
+          return 0x00;
+        }
+        case 0x0D: return (this.txCount & 0xFF);
+        case 0x0E: return this.rxCount & 0xFF;
+        case 0x0F: return (this.rxCount >>> 8) & 0xFF;
+        default: return 0x00;
+      }
+    }
+
+    portWrite(port, val) {
+      val &= 0xFF;
+      const off = port - 0x02A0;
+      switch (off) {
+        case 0x02: { // Command register
+          if (val === 0x01) { // CMD_TX_SEND
+            const len = Math.max(0, Math.min(512, this.txLen));
+            if (len > 0 && this.host && this.host.ram) {
+              const addr = this.dmaAddr >>> 0;
+              const frame = this.host.ram.subarray(addr, addr + len);
+              this.sendFrame(frame);
+            } else if (this.pioTxBuf.length > 0) {
+              this.sendFrame(new Uint8Array(this.pioTxBuf));
+              this.pioTxBuf = [];
+            }
+          } else if (val === 0x02) { // CMD_RX_POP
+            const f = this.recvFrame();
+            if (f && this.host && this.host.ram) {
+              const addr = this.dmaAddr >>> 0;
+              for (let i = 0; i < f.length; i++) {
+                this.host.physWrite8(addr + i, f[i]);
+              }
+              this.pioRxBuf = f;
+              this.pioRxIdx = 0;
+            } else {
+              this.lastRxLen = 0;
+            }
+          } else if (val === 0x03) { // CMD_RESET
+            this.reset();
+          } else if (val === 0x04) { // CMD_IRQ_EN
+            this.irqEnabled = true;
+          } else if (val === 0x05) { // CMD_IRQ_DIS
+            this.irqEnabled = false;
+          }
+          break;
+        }
+        case 0x04: this.nodeId = (this.nodeId & 0xFF00) | val; break;
+        case 0x05: this.nodeId = (this.nodeId & 0x00FF) | (val << 8); break;
+        case 0x06: this.txLen = (this.txLen & 0xFF00) | val; break;
+        case 0x07: this.txLen = (this.txLen & 0x00FF) | (val << 8); break;
+        case 0x08: this.dmaAddr = ((this.dmaAddr & 0xFFFFFF00) | val) >>> 0; break;
+        case 0x09: this.dmaAddr = ((this.dmaAddr & 0xFFFF00FF) | (val << 8)) >>> 0; break;
+        case 0x0A: this.dmaAddr = ((this.dmaAddr & 0xFF00FFFF) | (val << 16)) >>> 0; break;
+        case 0x0B: this.dmaAddr = ((this.dmaAddr & 0x00FFFFFF) | (val << 24)) >>> 0; break;
+        case 0x0C: this.pioTxBuf.push(val); break;
+      }
+    }
+  }
+
 class HummingbirdPC {
   constructor(options = {}) {
     this.ramSizeMB = Math.max(16, Math.min(256, options.ramSizeMB || 64));
@@ -3648,6 +3982,7 @@ class HummingbirdPC {
     this.vga = new VGADisplay(this);
     this.dma = new DMA8237(this);
     this.fdc = new FDC82077AA(this);
+    this.snet = new StudioNetNIC(this, 0x0201); // [Hummingbird 1.3] StudioNet card, ports 0x2A0-0x2AF, IRQ 10
     this.cpu = new X86CPU(this);
 
     this.reset();
@@ -3680,6 +4015,7 @@ class HummingbirdPC {
     this.pci.reset();
     this.dma.reset();
     this.fdc.reset();
+    if (this.snet) this.snet.reset(); // [Hummingbird 1.3]
     const savedInst = this.cpu.totalInstructions;
     const savedCycles = this.cpu.cycles;
     const savedHits = this.cpu.basicBlockHits;
@@ -3808,6 +4144,7 @@ class HummingbirdPC {
     this.ps2.reset();
     this.dma.reset();
     this.fdc.reset();
+    if (this.snet) this.snet.reset(); // [Hummingbird 1.3]
     const savedInst = this.cpu.totalInstructions;
     const savedCycles = this.cpu.cycles;
     this.vga.reset();
@@ -5040,6 +5377,13 @@ class HummingbirdPC {
       case 0x3DA:
         return this.vga.portRead(port, size);
 
+      // StudioNet Virtual Network Controller (0x02A0..0x02AF) [Hummingbird 1.3]
+      case 0x2A0: case 0x2A1: case 0x2A2: case 0x2A3:
+      case 0x2A4: case 0x2A5: case 0x2A6: case 0x2A7:
+      case 0x2A8: case 0x2A9: case 0x2AA: case 0x2AB:
+      case 0x2AC: case 0x2AD: case 0x2AE: case 0x2AF:
+        return this.snet.portRead(port);
+
       // 82077AA Floppy Disk Controller (0x3F0..0x3F5, 0x3F7)
       case 0x3F0:
       case 0x3F1:
@@ -5164,6 +5508,14 @@ class HummingbirdPC {
       case 0x3D5:
       case 0x3DA:
         this.vga.portWrite(port, val, size);
+        return;
+
+      // StudioNet [Hummingbird 1.3]
+      case 0x2A0: case 0x2A1: case 0x2A2: case 0x2A3:
+      case 0x2A4: case 0x2A5: case 0x2A6: case 0x2A7:
+      case 0x2A8: case 0x2A9: case 0x2AA: case 0x2AB:
+      case 0x2AC: case 0x2AD: case 0x2AE: case 0x2AF:
+        this.snet.portWrite(port, val);
         return;
 
       case 0x3F0:
@@ -11005,6 +11357,8 @@ if (typeof globalThis !== 'undefined') {
   globalThis.PCIBus = PCIBus;
   globalThis.DMA8237 = DMA8237;
   globalThis.FDC82077AA = FDC82077AA;
+  globalThis.StudioNetNIC = StudioNetNIC; // [Hummingbird 1.3]
+  globalThis.generateSonderProceduralPage = generateSonderProceduralPage;
 }
 
 // Browser-only UI initialization
@@ -11654,5 +12008,49 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
 })();
   </script>
+<!-- [Hummingbird 1.3] lifted from SpiralOS hummingbird.html (node-id bar) -->
+<!-- StudioNet 1.0 Hardware Node ID Control & ?node=0xNNNN URL Parameter -->
+<div id="studionet-node-id-bar" style="position:fixed;bottom:8px;right:8px;z-index:9999;background:#111628;border:1px solid #2b3860;padding:4px 8px;border-radius:4px;font-family:monospace;font-size:12px;color:#eef3ff;display:flex;align-items:center;gap:6px;">
+  <label for="studionet-node-id-input">Node ID:</label>
+  <input id="studionet-node-id-input" type="text" value="0x0201" style="width:64px;background:#080b14;color:#28e08c;border:1px solid #2b3860;padding:2px 4px;font-family:monospace;font-size:12px;"/>
+</div>
+<script>
+(function() {
+  function parseNodeParam() {
+    try {
+      var m = (window.location.search || "").match(/[?&]node=(0x[0-9a-fA-F]+|\d+)/);
+      if (!m) return null;
+      var v = m[1].indexOf("0x") === 0 ? parseInt(m[1], 16) : parseInt(m[1], 10);
+      return (v > 0 && v < 0xFFFF) ? (v & 0xFFFF) : null;
+    } catch (e) { return null; }
+  }
+  function applyHardwareNodeId(nid) {
+    if (!nid || nid <= 0 || nid >= 0xFFFF) return;
+    if (globalThis.__STUDIONET_SWITCH && globalThis.__STUDIONET_SWITCH.nics) {
+      globalThis.__STUDIONET_SWITCH.nics.forEach(function(nic) {
+        nic.defaultNodeId = nid;
+        nic.nodeId = nid;
+        if (nic.host && nic.host._syncStudioNetMMIO) nic.host._syncStudioNetMMIO();
+      });
+    }
+    if (globalThis.SpiralTritonStation && globalThis.SpiralTritonStation.wasmVm) {
+      globalThis.SpiralTritonStation.wasmVm.snetNodeId = nid;
+    }
+  }
+  var inp = document.getElementById("studionet-node-id-input");
+  var urlNode = parseNodeParam();
+  if (urlNode !== null && inp) {
+    inp.value = "0x" + urlNode.toString(16).padStart(4, "0");
+    setTimeout(function() { applyHardwareNodeId(urlNode); }, 0);
+  }
+  if (inp) {
+    inp.addEventListener("change", function() {
+      var raw = inp.value.trim();
+      var v = raw.indexOf("0x") === 0 ? parseInt(raw, 16) : parseInt(raw, 10);
+      if (v > 0 && v < 0xFFFF) applyHardwareNodeId(v & 0xFFFF);
+    });
+  }
+})();
+</script>
 </body>
 </html>
